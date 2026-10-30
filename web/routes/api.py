@@ -60,6 +60,20 @@ class FullConfig(BaseModel):
 @router.get("/status")
 async def get_status():
     """Bot durumu, istatistikler ve sonraki çalışma zamanı."""
+    if bot_state.status == BotStatus.NO_SESSION:
+        try:
+            from src.session import SessionManager
+            cfg = load_config(CONFIG_PATH)
+            sess_cfg = cfg.get("session", {})
+            sm = SessionManager(
+                cookie_file=sess_cfg.get("cookie_file", "./sessions/claude_cookies.json"),
+                storage_file=sess_cfg.get("storage_file", "./sessions/claude_storage.json"),
+            )
+            if sm.session_exists():
+                bot_state.set_idle()
+        except Exception:
+            pass
+
     status_data = bot_state.to_dict()
     scheduler_data = get_scheduler_status()
     return {

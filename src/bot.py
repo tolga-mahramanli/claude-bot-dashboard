@@ -127,22 +127,111 @@ def resolve_chrome_version(browser_cfg: dict, chrome_bin: str = "") -> Optional[
     return detected
 
 
+def resolve_cached_driver(chrome_version: Optional[int]) -> Optional[str]:
+    """
+    Daha önce indirilip patch'lenmiş ve ana sürümü uyuşan chromedriver varsa
+    yolunu döndürür. Böylece her görevde GitHub'dan tekrar indirme yapılmaz
+    ve geçici DNS/ağ kesintilerinde (Errno 8) görev çökmez.
+    """
+    try:
+        patcher = uc.Patcher(version_main=chrome_version)
+        exe_path = Path(patcher.executable_path)
+        if not exe_path.exists():
+            return None
+        if not patcher.is_binary_patched(str(exe_path)):
+            return None
+        if chrome_version:
+            out = subprocess.run(
+                [str(exe_path), "--version"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+            match = re.search(r"ChromeDriver\s+(\d+)\.", out)
+            if not match or int(match.group(1)) != chrome_version:
+                return None
+        return str(exe_path)
+    except Exception:
+        return None
+
+
+def cleanup_stale_profile_locks(user_data_dir: str) -> None:
+    """
+    Önceki Chrome sürecinden kalan ölü/zombie SingletonLock dosyalarını temizler.
+    """
+    if IS_WINDOWS:
+        return
+    profile = Path(user_data_dir)
+    lock_file = profile / "SingletonLock"
+    if not (lock_file.is_symlink() or lock_file.exists()):
+        return
+
+    stale = False
+    try:
+        target = os.readlink(lock_file)
+        match = re.search(r"-(\d+)$", target)
+        if match:
+            pid = int(match.group(1))
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except OSError:
+                pass
+            try:
+                os.kill(pid, 0)
+                stat_out = subprocess.run(
+                    ["ps", "-o", "stat=", "-p", str(pid)],
+                    capture_output=True, text=True, timeout=3,
+                ).stdout.strip()
+                if not stat_out or stat_out.startswith("Z"):
+                    stale = True
+            except OSError:
+                stale = True
+    except OSError:
+        stale = True
+
+    if stale:
+        for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+            p = profile / name
+            try:
+                if p.is_symlink() or p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+        logger.debug("Eski Chrome profil kilidi (SingletonLock) temizlendi")
+
+
 # ────────────────────────────────────────────────────────────────
-# Claude.ai DOM Selektörleri
+# Claude.ai DOM Selektörleri (Hibrit: İngilizce + Türkçe + Genel)
 # ────────────────────────────────────────────────────────────────
 class Selectors:
-    TEXTAREA          = 'div[contenteditable="true"][data-placeholder]'
-    TEXTAREA_FB1      = 'div[contenteditable="true"]'
-    TEXTAREA_FB2      = 'p[data-placeholder]'
+    TEXTAREA_SELECTORS = [
+        'div.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"][data-placeholder]',
+        'div[contenteditable="true"]',
+        'p[data-placeholder]',
+    ]
     SEND_BUTTON_SELECTORS = [
+        # İngilizce
         'button[aria-label="Send message"]',
         'button[aria-label="Send Message"]',
+        'button[aria-label*="Send" i]',
+        # Türkçe
+        'button[aria-label="Mesaj gönder"]',
+        'button[aria-label="Mesajı gönder"]',
+        'button[aria-label="Gönder"]',
+        'button[aria-label*="gönder" i]',
+        # Dil bağımsız
         'button[data-testid="send-button"]',
         'button[type="submit"]',
     ]
-    STOP_BUTTON       = 'button[aria-label="Stop Response"], button[aria-label="Stop"]'
-    PAGE_LOADED       = 'div[class*="conversation"], main'
-    LOGIN_INDICATOR   = 'button[data-testid="login-with-google"], a[href*="/login"]'
+    STOP_BUTTON = (
+        'button[aria-label="Stop Response"], '
+        'button[aria-label="Stop response"], '
+        'button[aria-label="Stop"], '
+        'button[aria-label="Yanıtı durdur"], '
+        'button[aria-label="Durdur"], '
+        'button[data-testid="stop-button"]'
+    )
+    PAGE_LOADED     = 'div[class*="conversation"], main'
+    LOGIN_INDICATOR = 'button[data-testid="login-with-google"], a[href*="/login"], input[type="email"]'
 
 
 # ────────────────────────────────────────────────────────────────
@@ -202,6 +291,7 @@ class ClaudeBot:
 
         user_data_dir = self.browser_cfg.get("user_data_dir", "./sessions/chrome_profile")
         Path(user_data_dir).mkdir(parents=True, exist_ok=True)
+        cleanup_stale_profile_locks(user_data_dir)
         options.add_argument(f"--user-data-dir={os.path.abspath(user_data_dir)}")
 
         proxy = self.browser_cfg.get("proxy", "")
@@ -213,8 +303,14 @@ class ClaudeBot:
             options.binary_location = chrome_bin
 
         chrome_version = resolve_chrome_version(self.browser_cfg, chrome_bin)
+        cached_driver = resolve_cached_driver(chrome_version)
         logger.info(f"Driver başlatılıyor (platform={platform.system()}, headless={self.browser_cfg.get('headless', True)})")
-        driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version)
+        driver = uc.Chrome(
+            options=options,
+            use_subprocess=True,
+            version_main=chrome_version,
+            driver_executable_path=cached_driver,
+        )
 
         self._apply_user_agent(driver)
         driver.execute_script(
@@ -262,6 +358,7 @@ class ClaudeBot:
 
     def _close_driver(self) -> None:
         if self.driver:
+            browser_pid = getattr(self.driver, "browser_pid", None)
             try:
                 self.driver.quit()
                 logger.info("Driver kapatıldı")
@@ -269,11 +366,24 @@ class ClaudeBot:
                 pass
             finally:
                 self.driver = None
+                if browser_pid and not IS_WINDOWS:
+                    for _ in range(10):
+                        try:
+                            pid, _ = os.waitpid(browser_pid, os.WNOHANG)
+                            if pid != 0:
+                                break
+                        except OSError:
+                            break
+                        time.sleep(0.05)
 
     # ── Session ───────────────────────────────────────────────
 
     def _is_logged_in(self) -> bool:
         try:
+            current_url = self.driver.current_url or ""
+            if "/login" in current_url:
+                logger.warning("⚠️  Login sayfası tespit edildi (URL)!")
+                return False
             self.driver.find_element(By.CSS_SELECTOR, Selectors.LOGIN_INDICATOR)
             logger.warning("⚠️  Login sayfası tespit edildi!")
             return False
@@ -309,22 +419,32 @@ class ClaudeBot:
         try:
             self.driver = self._build_driver()
 
-            if not self.session_manager.session_exists():
-                logger.error("❌ Session dosyası bulunamadı!")
-                bot_state.set_no_session()
-                return False
-
-            self.session_manager.load_session(self.driver, target_url)
+            had_cookie_file = self.session_manager.session_exists()
+            if had_cookie_file:
+                self.session_manager.load_session(self.driver, target_url)
+            else:
+                logger.warning("⚠️  Cookie dosyası bulunamadı; Chrome profilindeki oturum kontrol ediliyor...")
 
             logger.info(f"Sayfaya gidiliyor: {target_url}")
             self.driver.get(target_url)
             self._human_delay(2, 4)
 
             if not self._is_logged_in():
+                if not had_cookie_file:
+                    logger.error("❌ Session dosyası bulunamadı ve Chrome profilinde açık oturum yok!")
+                    bot_state.set_no_session()
+                    return False
                 logger.error("❌ Oturum açılmamış!")
                 ss = self._take_screenshot("login_required")
                 bot_state.set_error("Oturum geçersiz - yeniden login gerekiyor", ss)
                 return False
+
+            if not had_cookie_file:
+                logger.info("✅ Chrome profilinden aktif oturum kurtarıldı, session dosyası kaydediliyor...")
+                try:
+                    self.session_manager.save_session(self.driver)
+                except Exception as save_exc:
+                    logger.warning(f"⚠️  Kurtarılan session diske yazılamadı: {save_exc}")
 
             self._wait_for_page_load()
 
@@ -372,21 +492,29 @@ class ClaudeBot:
         self._human_delay(1, 2)
 
     def _find_textarea(self):
-        """Textarea'yı birden fazla selektörle arar."""
+        """Textarea'yı birden fazla selektörle tek bekleme döngüsünde arar."""
         timeout = self.timeout_cfg.get("element_wait", 20)
-        wait = WebDriverWait(self.driver, timeout)
-        for selector in (Selectors.TEXTAREA, Selectors.TEXTAREA_FB1, Selectors.TEXTAREA_FB2):
-            try:
-                el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
-                ce = el.get_attribute("contenteditable")
-                if ce in ("true", "plaintext-only", None):
-                    logger.debug(f"Textarea bulundu: {selector}")
-                    return el
-            except TimeoutException:
-                continue
-        raise NoSuchElementException(
-            "Textarea bulunamadı! src/bot.py → Selectors sınıfını güncelleyin."
-        )
+
+        def _locate_any(driver):
+            for selector in Selectors.TEXTAREA_SELECTORS:
+                for el in driver.find_elements(By.CSS_SELECTOR, selector):
+                    try:
+                        if not (el.is_displayed() and el.is_enabled()):
+                            continue
+                        ce = el.get_attribute("contenteditable")
+                        if ce in ("true", "plaintext-only", None):
+                            logger.debug(f"Textarea bulundu: {selector}")
+                            return el
+                    except Exception:
+                        continue
+            return False
+
+        try:
+            return WebDriverWait(self.driver, timeout).until(_locate_any)
+        except TimeoutException:
+            raise NoSuchElementException(
+                "Textarea bulunamadı! src/bot.py → Selectors sınıfını güncelleyin."
+            )
 
     def _send_message(self, prompt: str) -> bool:
         """
@@ -484,28 +612,28 @@ class ClaudeBot:
             return False
 
     def _click_send_button(self) -> bool:
-        """Gönder butonunu bulur, disabled kontrolü yapar ve tıklar."""
-        timeout = self.timeout_cfg.get("element_wait", 15)
-        wait = WebDriverWait(self.driver, timeout)
-
-        for selector in Selectors.SEND_BUTTON_SELECTORS:
-            try:
-                btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-                is_disabled = btn.get_attribute("disabled")
-                if is_disabled:
-                    time.sleep(0.5)
-                    if btn.get_attribute("disabled"):
-                        logger.warning(f"⚠️  Gönder butonu disabled: {selector}")
+        """Gönder butonunu (TR/EN/genel) tek döngüde arar, aktifse tıklar."""
+        def _locate_clickable_btn(driver):
+            for selector in Selectors.SEND_BUTTON_SELECTORS:
+                for btn in driver.find_elements(By.CSS_SELECTOR, selector):
+                    try:
+                        if not btn.is_displayed():
+                            continue
+                        if btn.get_attribute("disabled") or btn.get_attribute("aria-disabled") == "true":
+                            continue
+                        return selector, btn
+                    except Exception:
                         continue
-                wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
-                btn.click()
-                logger.info(f"✅ Gönder butonu tıklandı: {selector}")
-                return True
-            except (TimeoutException, NoSuchElementException):
-                continue
+            return False
 
-        logger.warning("⚠️  Gönder butonu hiçbir selektörle bulunamadı")
-        return False
+        try:
+            selector, btn = WebDriverWait(self.driver, 3).until(_locate_clickable_btn)
+            btn.click()
+            logger.info(f"✅ Gönder butonu tıklandı: {selector}")
+            return True
+        except TimeoutException:
+            logger.warning("⚠️  Gönder butonu hiçbir selektörle bulunamadı")
+            return False
 
     def _wait_for_response(self) -> None:
         max_wait = self.timeout_cfg.get("response_wait", 120)

@@ -42,9 +42,16 @@ def parse_args() -> argparse.Namespace:
 
 def save_session_mode(config: dict) -> None:
     """Manuel login + session kaydetme (ilk kurulum)."""
+    import threading
     import time
     import undetected_chromedriver as uc
     from src.session import SessionManager
+    from src.bot import (
+        resolve_chrome_version,
+        resolve_cached_driver,
+        find_chrome_binary,
+        cleanup_stale_profile_locks,
+    )
 
     logger.info("=" * 60)
     logger.info("📋 SESSION KAYDETME MODU")
@@ -59,38 +66,79 @@ def save_session_mode(config: dict) -> None:
 
     user_data_dir = config.get("browser", {}).get("user_data_dir", "./sessions/chrome_profile")
     Path(user_data_dir).mkdir(parents=True, exist_ok=True)
+    cleanup_stale_profile_locks(user_data_dir)
     options.add_argument(f"--user-data-dir={str(Path(user_data_dir).resolve())}")
 
-    from src.bot import resolve_chrome_version, find_chrome_binary
     chrome_bin = config.get("browser", {}).get("chrome_binary", "") or find_chrome_binary()
     if chrome_bin:
         options.binary_location = chrome_bin
     chrome_version = resolve_chrome_version(config.get("browser", {}), chrome_bin)
+    cached_driver = resolve_cached_driver(chrome_version)
     logger.info("Chrome açılıyor...")
-    driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version)
+    driver = uc.Chrome(
+        options=options,
+        use_subprocess=True,
+        version_main=chrome_version,
+        driver_executable_path=cached_driver,
+    )
 
     base_url = config.get("claude", {}).get("base_url", "https://claude.ai")
     driver.get(base_url)
-
-    print("\n" + "=" * 60)
-    print("🌐 Tarayıcı açıldı: claude.ai")
-    print("\n  1. Claude.ai'ye manuel giriş yapın")
-    print("  2. Giriş tamamlandığında terminale dönün")
-    print("  3. ENTER'a basın")
-    print("=" * 60 + "\n")
-    input("✅ Giriş yaptıktan sonra ENTER'a basın: ")
 
     sm = SessionManager(
         cookie_file=config.get("session", {}).get("cookie_file", "./sessions/claude_cookies.json"),
         storage_file=config.get("session", {}).get("storage_file", "./sessions/claude_storage.json"),
     )
 
+    # Kullanıcı pencereyi ENTER'dan önce kapatsa bile oturumu kaçırmamak için
+    # arka planda giriş tamamlandığında (sessionKey oluştuğunda) otomatik yedekle
+    stop_event = threading.Event()
+    auto_saved = False
+
+    def _auto_snapshot() -> None:
+        nonlocal auto_saved
+        while not stop_event.is_set():
+            time.sleep(2.0)
+            if stop_event.is_set():
+                break
+            try:
+                cookies = driver.get_cookies()
+                if isinstance(cookies, list) and any(c.get("name") == "sessionKey" for c in cookies):
+                    sm.save_session(driver)
+                    auto_saved = True
+            except Exception:
+                pass
+
+    watcher = threading.Thread(target=_auto_snapshot, daemon=True)
+    watcher.start()
+
+    print("\n" + "=" * 60)
+    print("🌐 Tarayıcı açıldı: claude.ai")
+    print("\n  1. Claude.ai'ye manuel giriş yapın")
+    print("  2. Giriş tamamlandığında (pencereyi kapatmadan) terminale dönün")
+    print("  3. ENTER'a basın")
+    print("=" * 60 + "\n")
+    try:
+        input("✅ Giriş yaptıktan sonra ENTER'a basın: ")
+    finally:
+        stop_event.set()
+        watcher.join(timeout=2.0)
+
     try:
         sm.save_session(driver)
         print("\n✅ Session başarıyla kaydedildi!")
         print("   Şimdi 'python main.py' ile Web UI'ı başlatabilirsiniz.")
+    except Exception:
+        if auto_saved and sm.session_exists():
+            print("\n✅ Tarayıcı penceresi kapatılmış ancak oturum otomatik olarak kaydedildi!")
+            print("   Şimdi 'python main.py' ile Web UI'ı başlatabilirsiniz.")
+        else:
+            raise
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 
 def run_once_mode(config: dict) -> None:

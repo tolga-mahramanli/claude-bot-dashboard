@@ -35,26 +35,56 @@ class SessionManager:
     def save_session(self, driver: WebDriver) -> None:
         """Mevcut oturumun cookie ve localStorage'ını diske kaydeder."""
         try:
-            # Cookie'leri kaydet
-            cookies = driver.get_cookies()
+            # Açık bir sekme varsa aktif pencereye geçmeyi dene
+            try:
+                handles = driver.window_handles
+                if handles:
+                    driver.switch_to.window(handles[-1])
+            except Exception:
+                pass
+
+            # Cookie'leri al (None dönerse CDP ile yedek dene)
+            cookies = None
+            try:
+                cookies = driver.get_cookies()
+            except Exception:
+                pass
+
+            if not cookies:
+                try:
+                    cdp_res = driver.execute_cdp_cmd("Network.getAllCookies", {})
+                    if isinstance(cdp_res, dict):
+                        cookies = cdp_res.get("cookies")
+                except Exception:
+                    pass
+
+            if not isinstance(cookies, list) or len(cookies) == 0:
+                raise RuntimeError(
+                    "Kaydedilecek cookie alınamadı (tarayıcı penceresi erken kapatılmış olabilir)"
+                )
+
             with open(self.cookie_file, "w", encoding="utf-8") as f:
                 json.dump(cookies, f, indent=2, ensure_ascii=False)
             logger.info(f"✅ {len(cookies)} cookie kaydedildi → {self.cookie_file}")
 
             # localStorage'ı kaydet
-            storage = driver.execute_script(
-                """
-                let storage = {};
-                for (let i = 0; i < localStorage.length; i++) {
-                    let key = localStorage.key(i);
-                    storage[key] = localStorage.getItem(key);
-                }
-                return storage;
-                """
-            )
-            with open(self.storage_file, "w", encoding="utf-8") as f:
-                json.dump(storage, f, indent=2, ensure_ascii=False)
-            logger.info(f"✅ localStorage kaydedildi → {self.storage_file}")
+            try:
+                storage = driver.execute_script(
+                    """
+                    let storage = {};
+                    for (let i = 0; i < localStorage.length; i++) {
+                        let key = localStorage.key(i);
+                        storage[key] = localStorage.getItem(key);
+                    }
+                    return storage;
+                    """
+                )
+                if isinstance(storage, dict):
+                    with open(self.storage_file, "w", encoding="utf-8") as f:
+                        json.dump(storage, f, indent=2, ensure_ascii=False)
+                    logger.info(f"✅ localStorage kaydedildi → {self.storage_file}")
+            except Exception as ls_exc:
+                logger.warning(f"⚠️  localStorage alınamadı (cookie'ler kaydedildi): {ls_exc}")
 
         except Exception as exc:
             logger.error(f"Session kaydetme hatası: {exc}", exc_info=True)
@@ -67,8 +97,8 @@ class SessionManager:
             True  → session başarıyla yüklendi
             False → kayıtlı session yok, yeniden giriş gerekiyor
         """
-        if not self.cookie_file.exists():
-            logger.warning("⚠️  Cookie dosyası bulunamadı. Manuel giriş gerekiyor.")
+        if not self.session_exists():
+            logger.warning("⚠️  Cookie dosyası bulunamadı veya boş. Manuel giriş gerekiyor.")
             return False
 
         try:
@@ -81,6 +111,10 @@ class SessionManager:
             # Cookie'leri yükle
             with open(self.cookie_file, "r", encoding="utf-8") as f:
                 cookies: list[dict] = json.load(f)
+
+            if not isinstance(cookies, list) or not cookies:
+                logger.warning("⚠️  Cookie dosyası geçerli bir liste içermiyor.")
+                return False
 
             loaded = 0
             skipped = 0
@@ -101,13 +135,14 @@ class SessionManager:
                 with open(self.storage_file, "r", encoding="utf-8") as f:
                     storage: dict = json.load(f)
 
-                for key, value in storage.items():
-                    driver.execute_script(
-                        "localStorage.setItem(arguments[0], arguments[1]);",
-                        key,
-                        value,
-                    )
-                logger.info(f"✅ {len(storage)} localStorage öğesi yüklendi")
+                if isinstance(storage, dict):
+                    for key, value in storage.items():
+                        driver.execute_script(
+                            "localStorage.setItem(arguments[0], arguments[1]);",
+                            key,
+                            value,
+                        )
+                    logger.info(f"✅ {len(storage)} localStorage öğesi yüklendi")
 
             return True
 
@@ -116,8 +151,15 @@ class SessionManager:
             return False
 
     def session_exists(self) -> bool:
-        """Cookie dosyasının var olup olmadığını kontrol eder."""
-        return self.cookie_file.exists() and self.cookie_file.stat().st_size > 10
+        """Cookie dosyasının var olup olmadığını ve geçerli veri içerdiğini kontrol eder."""
+        if not self.cookie_file.exists() or self.cookie_file.stat().st_size <= 10:
+            return False
+        try:
+            with open(self.cookie_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return isinstance(data, list) and len(data) > 0
+        except Exception:
+            return False
 
     def clear_session(self) -> None:
         """Kayıtlı session dosyalarını siler (çıkış yaptıktan sonra kullan)."""
