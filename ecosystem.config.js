@@ -1,5 +1,5 @@
 // ============================================================
-// PM2 Ecosystem - Mac Uyumlu Konfigürasyon
+// PM2 Ecosystem - Cross-Platform (Windows, Mac, Linux)
 // Kullanım: pm2 start ecosystem.config.js
 // ============================================================
 
@@ -8,7 +8,7 @@ module.exports = {
     {
       name: "claude-bot",
       script: "main.py",
-      interpreter: "python3",
+      interpreter: process.platform === "win32" ? "python" : "python3",
 
       // ── Mac Ortam Değişkenleri ───────────────────────────
       // Mac'te Xvfb gerekmez; headless=true yeterli.

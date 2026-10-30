@@ -7,6 +7,8 @@
 undetected-chromedriver==3.5.5
 # WebDriverWait, selektörler
 selenium==4.21.0
+# Python 3.12+ distutils desteği (undetected-chromedriver için)
+setuptools>=65.0.0
 
 # ── Zamanlama ──────────────────────────────────────────────
 APScheduler==3.10.4

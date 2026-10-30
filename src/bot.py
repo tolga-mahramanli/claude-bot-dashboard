@@ -32,7 +32,8 @@ from src.state import bot_state, BotStatus
 
 logger = setup_logger("bot")
 
-IS_MAC = platform.system() == "Darwin"
+IS_MAC     = platform.system() == "Darwin"
+IS_WINDOWS = platform.system() == "Windows"
 
 MAC_CHROME_PATHS = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -40,11 +41,62 @@ MAC_CHROME_PATHS = [
 ]
 
 
+def _windows_chrome_paths() -> list:
+    """Windows'ta Chrome'un standart kurulum konumları (sistem + kullanıcı bazlı)."""
+    paths = []
+    for env in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        base = os.environ.get(env)
+        if base:
+            paths.append(str(Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe"))
+    return paths
+
+
+def find_chrome_binary() -> str:
+    """Mac/Windows'ta Chrome'u standart konumlarda arar; Linux'ta PATH'e bırakılır."""
+    candidates = MAC_CHROME_PATHS if IS_MAC else _windows_chrome_paths() if IS_WINDOWS else []
+    for p in candidates:
+        if Path(p).exists():
+            return p
+    return ""
+
+
+def _detect_chrome_major_windows(chrome_bin: str = "") -> Optional[int]:
+    """
+    Windows'ta `chrome.exe --version` çıktı vermez (hatta pencere açabilir).
+    Sürümü önce registry'den, olmazsa kurulum klasöründeki sürüm dizininden okur.
+    """
+    import winreg  # yalnızca Windows'ta mevcut
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, r"Software\Google\Chrome\BLBeacon") as key:
+                version, _ = winreg.QueryValueEx(key, "version")
+                return int(str(version).split(".")[0])
+        except (OSError, ValueError):
+            continue
+
+    # Yedek: ...\Chrome\Application\156.0.8078.76\ gibi sürüm klasörü
+    for exe in ([chrome_bin] if chrome_bin else []) + _windows_chrome_paths():
+        app_dir = Path(exe).parent
+        if not app_dir.is_dir():
+            continue
+        versions = [
+            int(d.name.split(".")[0]) for d in app_dir.iterdir()
+            if d.is_dir() and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", d.name)
+        ]
+        if versions:
+            return max(versions)
+    return None
+
+
 def detect_chrome_major(chrome_bin: str = "") -> Optional[int]:
     """
     Kurulu Chrome'un ana sürümünü (ör. 156) döndürür; bulunamazsa None.
     Chrome otomatik güncellendiğinde sabit version_main ChromeDriver'ı kırar.
     """
+    if IS_WINDOWS:
+        return _detect_chrome_major_windows(chrome_bin)
+
     candidates = [chrome_bin] if chrome_bin else []
     candidates += MAC_CHROME_PATHS if IS_MAC else [
         "google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
@@ -156,12 +208,7 @@ class ClaudeBot:
         if proxy:
             options.add_argument(f"--proxy-server={proxy}")
 
-        chrome_bin = self.browser_cfg.get("chrome_binary", "")
-        if not chrome_bin and IS_MAC:
-            for p in MAC_CHROME_PATHS:
-                if Path(p).exists():
-                    chrome_bin = p
-                    break
+        chrome_bin = self.browser_cfg.get("chrome_binary", "") or find_chrome_binary()
         if chrome_bin:
             options.binary_location = chrome_bin
 
@@ -185,9 +232,12 @@ class ClaudeBot:
         """
         full_version = driver.capabilities.get("browserVersion", "") or "0.0.0.0"
         major = full_version.split(".")[0]
-        platform_token = (
-            "Macintosh; Intel Mac OS X 10_15_7" if IS_MAC else "X11; Linux x86_64"
-        )
+        if IS_MAC:
+            platform_token, ch_platform = "Macintosh; Intel Mac OS X 10_15_7", "macOS"
+        elif IS_WINDOWS:
+            platform_token, ch_platform = "Windows NT 10.0; Win64; x64", "Windows"
+        else:
+            platform_token, ch_platform = "X11; Linux x86_64", "Linux"
         ua = (
             f"Mozilla/5.0 ({platform_token}) AppleWebKit/537.36 "
             f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
@@ -201,7 +251,7 @@ class ClaudeBot:
                     {"brand": "Not=A?Brand",   "version": "24"},
                 ],
                 "fullVersion":     full_version,
-                "platform":        "macOS" if IS_MAC else "Linux",
+                "platform":        ch_platform,
                 "platformVersion": "",
                 "architecture":    "",
                 "model":           "",

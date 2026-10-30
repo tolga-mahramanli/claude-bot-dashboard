@@ -1,15 +1,15 @@
-# Claude.ai Bot — Dashboard + Scheduler (v2)
+# Claude.ai Bot — Dashboard + Scheduler
 
-Python tabanlı Claude.ai otomasyon botu. **FastAPI Web Dashboard** + **APScheduler** aynı process içinde çalışır. Mac için optimize edilmiştir.
+Python tabanlı Claude.ai otomasyon botu. **FastAPI Web Dashboard** + **APScheduler** aynı process içinde çalışır. **Windows, macOS ve Linux** tam uyumludur.
 
 ---
 
 ## 📁 Proje Yapısı
 
 ```
-bot-claude/
+claude-bot-dashboard/
 ├── src/
-│   ├── bot.py          # Bot motoru (Mac + Ubuntu stealth Chrome)
+│   ├── bot.py          # Bot motoru (Windows, Mac, Linux stealth Chrome)
 │   ├── scheduler.py    # APScheduler BackgroundScheduler
 │   ├── session.py      # Cookie / localStorage yönetimi
 │   ├── logger.py       # Rotating log + Web UI buffer
@@ -19,281 +19,252 @@ bot-claude/
 │   ├── routes/
 │   │   └── api.py      # REST API + SSE endpoint'leri
 │   └── templates/
-│       └── index.html  # Tek sayfalık premium dashboard
+│       └── index.html  # Tek sayfalık modern dashboard
 ├── config/
-│   └── config.yaml     # Tüm ayarlar
-├── sessions/           # Cookie + Chrome profil (git'e gitmiyor)
-├── logs/               # Rotating log dosyaları
-├── screenshots/        # Hata ekran görüntüleri
-├── main.py             # Giriş noktası (3 mod)
+│   ├── config.example.yaml # Örnek konfigürasyon şablonu
+│   └── config.yaml     # Kişisel ayarlarınız (.gitignore'da saklanır)
+├── sessions/           # Cookie + Chrome profil (git'e gitmez)
+├── logs/               # Log dosyaları
+├── screenshots/        # Hata ve başarı ekran görüntüleri
+├── main.py             # Giriş noktası (Web UI / Run-once / Save-session)
 ├── requirements.txt    # Python bağımlılıkları
-├── ecosystem.config.js # PM2 konfigürasyonu (Mac uyumlu)
+├── ecosystem.config.js # PM2 konfigürasyonu (Cross-platform)
+├── setup.bat           # Windows tek tıkla otomatik kurulum
+├── start.bat           # Windows tek tıkla başlatma
 └── setup.sh            # Ubuntu VPS kurulum scripti
 ```
 
 ---
 
-## 🚀 Kurulum (Mac)
+## 🚀 Hızlı Kurulum
 
-### 1. Python sanal ortamı
+Ön koşul: Bilgisayarınızda **Google Chrome** ve **Python 3.10, 3.11 veya 3.12** kurulu olmalıdır.
 
-```bash
-cd bot-claude
-python3 -m venv venv
-source venv/bin/activate
+### 🪟 Windows Kurulumu
+
+#### Yöntem 1 — Tek Tıkla Kurulum (Kolay):
+Klasör içerisindeki `setup.bat` dosyasına çift tıklayın. Script otomatik olarak:
+- Python sürümünü doğrular
+- `venv` sanal ortamını oluşturur
+- Bağımlılıkları kurar
+- Klasör yapısını ve `config.yaml` şablonunu hazırlar
+
+#### Yöntem 2 — Manuel Kurulum (Komut İstemi / CMD veya PowerShell):
+```cmd
+:: 1. Sanal ortamı oluştur ve aktif et
+python -m venv venv
+venv\Scripts\activate
+
+:: 2. Bağımlılıkları yükle
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+
+:: 3. Konfigürasyon dosyasını oluştur
+copy config\config.example.yaml config\config.yaml
 ```
 
-### 2. Google Chrome kurulu olmalı
+---
 
-Mac'te Chrome `--headless=new` ile çalışır; **Xvfb gerekmez**.
+### 🍎 macOS Kurulumu
 
 ```bash
-# Chrome kurulu değilse:
+# 1. Sanal ortamı oluştur ve aktif et
+python3 -m venv venv
+source venv/bin/activate
+
+# 2. Bağımlılıkları yükle
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 3. Konfigürasyon dosyasını oluştur
+cp config/config.example.yaml config/config.yaml
+```
+
+*Google Chrome kurulu değilse:*
+```bash
 brew install --cask google-chrome
 ```
 
-### 3. PM2 kurulumu (opsiyonel, 7/24 çalışma için)
+---
+
+### 🐧 Linux (Ubuntu VPS) Kurulumu
+
+Headless Linux sunucularda sanal ekran (Xvfb) gerektiğinden tek komutla kurulum scriptini kullanabilirsiniz:
 
 ```bash
-# Node.js kurulu değilse:
-brew install node
-
-npm install -g pm2
+chmod +x setup.sh
+./setup.sh
 ```
 
 ---
 
 ## ⚙️ Konfigürasyon
 
-Önce örnek dosyadan kendi config'inizi oluşturun (`config.yaml` git'e gönderilmez):
-
-```bash
-cp config/config.example.yaml config/config.yaml
-```
-
-Ardından `config/config.yaml` dosyasını düzenleyin **veya** Web Dashboard'dan yapın:
+`config/config.yaml` dosyasını Not Defteri veya tercih ettiğiniz bir kod editörüyle düzenleyin (veya Web Dashboard açıldıktan sonra arayüzden yapın):
 
 ```yaml
 claude:
-  chat_id: "YOUR_CHAT_ID_HERE"   # claude.ai/chat/<ID>
-  prompt: |
-    Merhaba! Bu otomatik bir mesajdır.
+  base_url: https://claude.ai/chat
+  chat_id: ''          # Global varsayılan sohbet ID (opsiyonel)
+  prompt: ''
 
 scheduler:
   jobs:
-    - id: "sabah"
-      cron: "0 9 * * *"       # Her gün 09:00
+    - id: "sabah-raporu"
+      cron: "0 9 * * *"            # Her gün 09:00 (dakika saat gün ay haftanın-günü)
       enabled: true
-    - id: "aksam"
-      cron: "0 18 * * *"      # Her gün 18:00
+      chat_id: "YOUR_CHAT_ID_HERE" # claude.ai/chat/<ID> adresindeki UUID
+      prompt: "Günlük özeti hazırla ve listele."
+    - id: "aksam-kontrol"
+      cron: "0 18 * * *"           # Her gün 18:00
       enabled: true
+      chat_id: "YOUR_CHAT_ID_HERE"
+      prompt: "Yarım kalan görevleri gözden geçir ve tamamla."
   timezone: "Europe/Istanbul"
 
 browser:
-  headless: true               # Mac'te true yeterli, Xvfb gerekmez
+  headless: true                   # Arka planda gizli çalışması için true
+  window_size:
+    width: 1920
+    height: 1080
 ```
+
+> **Önemli:** `config/config.yaml` kişisel sohbet ID'lerinizi içerdiği için `.gitignore` tarafından korunur ve Git reponuza yüklenmez.
 
 ---
 
-## 🔐 İlk Kurulum: Session Kaydetme
+## 🔐 İlk Kurulum: Oturum (Session) Kaydetme
 
-**Tek seferlik** — Bot her çalışmada cookie'yi dosyadan okur.
+Botun Cloudflare ve giriş engellerine takılmaması için **tek seferlik** tarayıcıda giriş yapıp session kaydedilir:
 
+### Windows:
+```cmd
+venv\Scripts\activate
+python main.py --save-session
+```
+
+### macOS / Linux:
 ```bash
 source venv/bin/activate
 python main.py --save-session
 ```
 
-1. Chrome açılır (görünür modda)
-2. claude.ai'ye **manuel giriş** yapın
-3. Terminal'e dönüp **Enter**'a basın
-4. Session → `sessions/claude_cookies.json` olarak kaydedilir
+1. Chrome görünür modda açılır ve `claude.ai` sayfasına gider.
+2. Claude hesabınıza manuel giriş yapın (Google ile veya e-posta ile).
+3. Sohbet ekranını gördüğünüzde terminale geri dönün ve **ENTER** tuşuna basın.
+4. Çerezler `sessions/claude_cookies.json` dosyasına şifrelenmeden yerel olarak kaydedilir. Artık bot otomatik çalışabilir!
 
 ---
 
-## 🎯 Çalıştırma
+## 🎯 Botu Çalıştırma
 
-### Geliştirme / Test
+### 1. Web Dashboard + Scheduler (Normal Mod)
 
+**Windows:**
+`start.bat` dosyasına çift tıklayın veya CMD'de:
+```cmd
+venv\Scripts\activate
+python main.py
+```
+
+**macOS / Linux:**
 ```bash
 source venv/bin/activate
-
-# Önce bir kez test et
-python main.py --run-once
-
-# Web UI + Scheduler başlat
 python main.py
-# → http://localhost:8000
 ```
 
-### PM2 ile 7/24 Arka Plan
+Tarayıcınızdan **`http://localhost:8000`** adresine gidin.
 
+### 2. Tek Seferlik Test Çalıştırması
+Scheduler beklemeden botun mesaj gönderimini test etmek için:
 ```bash
-# Başlat
+python main.py --run-once
+```
+
+---
+
+## 🌐 Web Dashboard Özellikleri
+
+| Bölüm | Açıklama |
+|---|---|
+| **Genel Bakış** | Bot durumu (idle, running, success, error), toplam ve başarılı çalışma sayıları, sonraki çalışma zamanı |
+| **Hızlı Eylemler** | "Şimdi Çalıştır" butonu ile istediğiniz görevi anında tetikleme |
+| **Canlı Loglar** | SSE (Server-Sent Events) ile sayfayı yenilemeden gerçek zamanlı log akışı |
+| **Görsel Önizleme** | Son görev durumunun ve hataların ekran görüntüsü (screenshot) |
+| **Görev Yönetimi** | Web üzerinden yeni cron görevi ekleme, silme, prompt ve chat ID düzenleme |
+
+---
+
+## 🔄 7/24 Arka Planda Kesintisiz Çalıştırma
+
+### 🪟 Windows için Arka Plan Çalıştırma
+
+#### Seçenek A — PM2 ile Çalıştırma:
+Node.js kurulu ise:
+```cmd
+npm install -g pm2
 pm2 start ecosystem.config.js
-
-# Sistem başlangıcında otomatik başlat (Mac)
-pm2 startup
-# ↑ Çıktısındaki komutu kopyalayıp çalıştırın
 pm2 save
-
-# Durumu izle
-pm2 status
-pm2 logs claude-bot --lines 50
-
-# Yeniden başlat / durdur
-pm2 restart claude-bot
-pm2 stop claude-bot
 ```
 
-### Mac'in Uyumasını Engelleme
+#### Seçenek B — Windows Görev Zamanlayıcısı (Task Scheduler):
+1. `Win + R` basıp `taskschd.msc` yazın.
+2. **Temel Görev Oluştur** seçeneğine tıklayın.
+3. Tetikleyici olarak **Bilgisayar başladığında** veya **Kullanıcı oturum açtığında** seçin.
+4. Eylem olarak **Program başlat**:
+   - Program: `C:\...\bot-claude\venv\Scripts\python.exe`
+   - Bağımsız değişkenler: `main.py`
+   - Başlangıç yeri: `C:\...\bot-claude`
+5. Kaydedin.
 
-PM2 arka planda çalışırken Mac'in uyuması görevlerin kaçırılmasına yol açabilir.
+#### ⚠️ Windows'un Uyumasını Engelleme:
+Bilgisayar uyku moduna geçerse zamanlanmış bot görevleri çalışamaz.
+- **Ayarlar** → **Sistem** → **Güç ve Uyku** bölümünden:
+  - "Prize takılıyken şu süre sonunda uyku moduna geç:" ayarını **Hiçbir zaman** olarak ayarlayın.
 
-**Yöntem 1 — caffeinate (tavsiye edilen):**
+---
+
+### 🍎 macOS için Arka Plan Çalıştırma
+
 ```bash
-# PM2'yi caffeinate ile sar
+# PM2 ile başlatma
+pm2 start ecosystem.config.js
+pm2 startup
+pm2 save
+```
+
+#### ⚠️ Mac'in Uyumasını Engelleme:
+```bash
+# caffeinate ile uyanık tutarak PM2 çalıştırma
 caffeinate -i pm2 start ecosystem.config.js
-
-# Veya mevcut PM2 process'ini uyanık tut
-caffeinate -w $(pgrep -f "pm2")
-```
-
-**Yöntem 2 — Sistem Tercihleri:**
-Sistem Tercihleri → Enerji Tasarrufu → "Bilgisayarın otomatik olarak uyumasını engelle" seçeneğini açın.
-
-**Yöntem 3 — launchd (en sağlam):**
-```bash
-# ~/Library/LaunchAgents/com.claudebot.plist oluşturun
-# (README'nin sonundaki örneği kullanın)
 ```
 
 ---
 
-## 🌐 Web Dashboard
+## 🐛 Sık Karşılaşılan Sorunlar ve Çözümleri
 
-`http://localhost:8000` adresine gidin.
-
-| Sekme | Özellik |
-|-------|---------|
-| **Genel Bakış** | Bot durumu, istatistikler, sonraki çalışma, hızlı eylemler |
-| **Loglar** | SSE ile canlı log akışı, otomatik kaydırma |
-| **Konfigürasyon** | chat_id, prompt, cron zamanlamaları — kaydet & uygula |
-| **Screenshot** | Son hata ekran görüntüsü |
-
-### API Endpoint'leri
-
-| Method | URL | Açıklama |
-|--------|-----|----------|
-| `GET`  | `/api/status` | Bot durumu + istatistik |
-| `GET`  | `/api/config` | Mevcut config'i oku |
-| `POST` | `/api/config` | Config güncelle + scheduler reload |
-| `GET`  | `/api/logs` | Son N log satırı (`?n=100`) |
-| `GET`  | `/api/logs/stream` | SSE canlı log akışı |
-| `GET`  | `/api/screenshot` | Son screenshot (base64) |
-| `POST` | `/api/run-now` | Anında bot görevi tetikle |
-| `GET`  | `/api/jobs` | APScheduler job listesi |
-| `GET`  | `/docs` | Swagger UI |
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `Session dosyası bulunamadı` | İlk oturum kaydedilmemiş | `python main.py --save-session` komutunu çalıştırıp giriş yapın. |
+| `Oturum geçersiz / login required` | Claude çerezlerinin süresi dolmuş | Yeniden `python main.py --save-session` çalıştırın. |
+| `cannot connect to chrome / version mismatch` | Chrome güncellenmiş | Bot sürümü otomatik algılar; gerekirse `config.yaml` içindeki `browser.version_main` satırını kontrol edin. |
+| `Textarea bulunamadı` | Claude.ai arayüz selektörleri değişmiş | `src/bot.py` içindeki `Selectors` sınıfını güncelleyin. |
+| Windows'ta `ExecutionPolicy` hatası | PowerShell script çalıştırma kısıtı | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` komutunu girin veya `setup.bat` / CMD kullanın. |
+| Port 8000 meşgul | Başka bir servis portu kullanıyor | `python main.py --port 8080` ile farklı portta başlatın. |
 
 ---
 
-## 🏗️ Mimari
+## 📦 Temel Kütüphaneler
 
-```
-main.py (uvicorn)
-│
-├── FastAPI lifespan
-│   ├── APScheduler (BackgroundScheduler) ──┐
-│   │   └── CronTrigger → run_bot_job()     │
-│   └── HTTP Routes                          │
-│       ├── GET  /          (dashboard)      │
-│       └── /api/*          (REST + SSE)     │
-│                                            │
-├── ClaudeBot.run_task() ←──────────────────┘
-│   ├── undetected_chromedriver (stealth)
-│   ├── SessionManager (cookie load/save)
-│   └── WebDriverWait (DOM interaction)
-│
-└── BotState (thread-safe singleton)
-    ├── bot.py yazar
-    └── api.py okur → SSE / JSON
-```
+- **[undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver)** — Cloudflare & Bot tespit bypass motoru
+- **[Selenium](https://www.selenium.dev/)** — Web otomasyon ve element yönetimi
+- **[APScheduler](https://apscheduler.readthedocs.io/)** — Cron tabanlı asenkron arka plan görev zamanlayıcısı
+- **[FastAPI](https://fastapi.tiangolo.com/)** & **[Uvicorn](https://www.uvicorn.org/)** — Yüksek performanslı web dashboard sunucusu
+- **[PyYAML](https://pyyaml.org/)** & **[Pydantic](https://docs.pydantic.dev/)** — Tip güvenli yapılandırma ve API doğrulama
 
 ---
 
-## 🐛 Sorun Giderme
+## 🔒 Güvenlik Notu
 
-| Sorun | Çözüm |
-|-------|-------|
-| `Session yok` | `python main.py --save-session` |
-| `Login sayfası tespit edildi` | Session süresi dolmuş, yeniden `--save-session` |
-| `Textarea bulunamadı` | `src/bot.py` → `Selectors` sınıfını güncelle |
-| Chrome başlamıyor | `brew install --cask google-chrome` |
-| Dashboard açılmıyor | `python main.py` çalışıyor mu? Port 8000 meşgul mü? |
-| PM2 `ERRORED` | `pm2 logs claude-bot --err` |
-| Mac uyudu, görev kaçtı | `caffeinate` kullan (yukarıdaki bölüm) |
-
----
-
-## 📦 Bağımlılıklar
-
-| Paket | Amaç |
-|-------|------|
-| `undetected-chromedriver` | Cloudflare bypass stealth driver |
-| `selenium` | WebDriver, WebDriverWait |
-| `APScheduler` | BackgroundScheduler cron yönetimi |
-| `fastapi` | REST API + SSE web sunucusu |
-| `uvicorn` | ASGI sunucusu |
-| `jinja2` | HTML şablon motoru |
-| `pydantic` | API veri doğrulama |
-| `PyYAML` | Konfigürasyon okuma/yazma |
-
----
-
-## 🔒 Güvenlik
-
-```bash
-# Session dosyalarını koru
-chmod 600 sessions/*.json sessions/chrome_profile
-
-# .gitignore — sessions/ ve logs/ commit edilmez
-cat .gitignore
-```
-
-> Dashboard'u dışarıdan erişime açmak istiyorsanız `--host 0.0.0.0` kullanın
-> ve mutlaka bir reverse proxy (nginx) + temel kimlik doğrulama ekleyin.
-
----
-
-## 🍎 launchd ile Mac Başlangıcı (İleri Seviye)
-
-`~/Library/LaunchAgents/com.claudebot.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>          <string>com.claudebot</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/caffeinate</string>
-    <string>-i</string>
-    <string>/path/to/venv/bin/python</string>
-    <string>/path/to/bot-claude/main.py</string>
-  </array>
-  <key>WorkingDirectory</key> <string>/path/to/bot-claude</string>
-  <key>RunAtLoad</key>         <true/>
-  <key>KeepAlive</key>         <true/>
-  <key>StandardOutPath</key>   <string>/path/to/bot-claude/logs/launchd_out.log</string>
-  <key>StandardErrorPath</key> <string>/path/to/bot-claude/logs/launchd_err.log</string>
-</dict>
-</plist>
-```
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.claudebot.plist
-launchctl start com.claudebot
-```
+- Oturum çerezleri (`sessions/`) ve konfigürasyon (`config/config.yaml`) dosyalarınız hassas veriler içerir. Bu klasörler varsayılan olarak `.gitignore` dosyasında listelenmiştir.
+- Web Dashboard'u yerel ağınız dışına (`--host 0.0.0.0`) açacaksanız önünde mutlaka parola korumalı bir ters vekil sunucu (Nginx / Cloudflare Tunnel) konumlandırın.
