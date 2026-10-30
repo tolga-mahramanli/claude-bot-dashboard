@@ -134,15 +134,16 @@ async def stream_logs():
     Tarayıcı EventSource API ile bağlanır.
     """
     async def event_generator():
-        last_count = 0
+        # Monoton sıra numarası: buffer 300'de dolsa bile yeni satırlar tespit edilir.
+        # seq=0 → bağlanınca buffer'daki mevcut loglar da gönderilir.
+        last_seq = 0
         while True:
-            logs = bot_state.get_logs(last_n=300)
-            if len(logs) > last_count:
-                new_lines = logs[last_count:]
-                for line in new_lines:
-                    # SSE formatı: "data: <içerik>\n\n"
-                    yield f"data: {line}\n\n"
-                last_count = len(logs)
+            last_seq, new_lines = bot_state.get_logs_since(last_seq)
+            for line in new_lines:
+                # SSE formatı: "data: <içerik>\n\n"
+                # Çok satırlı loglar (traceback) her satıra "data: " ile tek event olur
+                payload = line.replace("\n", "\ndata: ")
+                yield f"data: {payload}\n\n"
 
             # Heartbeat (bağlantıyı canlı tut)
             yield ": heartbeat\n\n"

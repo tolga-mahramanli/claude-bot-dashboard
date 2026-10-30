@@ -5,6 +5,8 @@ Cloudflare bypass + stealth Chrome + Claude.ai otomasyon
 
 import os
 import platform
+import re
+import subprocess
 import time
 import random
 import traceback
@@ -31,6 +33,46 @@ from src.state import bot_state, BotStatus
 logger = setup_logger("bot")
 
 IS_MAC = platform.system() == "Darwin"
+
+MAC_CHROME_PATHS = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+]
+
+
+def detect_chrome_major(chrome_bin: str = "") -> Optional[int]:
+    """
+    Kurulu Chrome'un ana sürümünü (ör. 156) döndürür; bulunamazsa None.
+    Chrome otomatik güncellendiğinde sabit version_main ChromeDriver'ı kırar.
+    """
+    candidates = [chrome_bin] if chrome_bin else []
+    candidates += MAC_CHROME_PATHS if IS_MAC else [
+        "google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+    ]
+    for binary in candidates:
+        try:
+            out = subprocess.run(
+                [binary, "--version"], capture_output=True, text=True, timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        match = re.search(r"(\d+)\.\d+\.\d+", out)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def resolve_chrome_version(browser_cfg: dict, chrome_bin: str = "") -> Optional[int]:
+    """Config'de version_main varsa onu, yoksa otomatik algılananı kullanır."""
+    configured = browser_cfg.get("version_main")
+    if configured:
+        return int(configured)
+    detected = detect_chrome_major(chrome_bin)
+    if detected:
+        logger.info(f"Kurulu Chrome sürümü algılandı: {detected}")
+    else:
+        logger.warning("⚠️  Chrome sürümü algılanamadı; undetected_chromedriver'a bırakılıyor")
+    return detected
 
 
 # ────────────────────────────────────────────────────────────────
@@ -99,16 +141,8 @@ class ClaudeBot:
         options.add_argument("--lang=tr-TR,tr")
         options.add_argument("--disable-ipc-flooding-protection")
 
-        if IS_MAC:
-            options.add_argument(
-                "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            )
-        else:
-            options.add_argument(
-                "--user-agent=Mozilla/5.0 (X11; Linux x86_64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            )
+        # User-Agent burada sabitlenmez; driver açıldıktan sonra gerçek
+        # Chrome sürümüne göre CDP ile ayarlanır (bkz. _apply_user_agent).
 
         w = self.browser_cfg.get("window_size", {}).get("width",  1440)
         h = self.browser_cfg.get("window_size", {}).get("height", 900)
@@ -124,32 +158,57 @@ class ClaudeBot:
 
         chrome_bin = self.browser_cfg.get("chrome_binary", "")
         if not chrome_bin and IS_MAC:
-            for p in [
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "/Applications/Chromium.app/Contents/MacOS/Chromium",
-            ]:
+            for p in MAC_CHROME_PATHS:
                 if Path(p).exists():
                     chrome_bin = p
                     break
         if chrome_bin:
             options.binary_location = chrome_bin
 
-        chrome_version = self.browser_cfg.get("version_main", 154)
+        chrome_version = resolve_chrome_version(self.browser_cfg, chrome_bin)
         logger.info(f"Driver başlatılıyor (platform={platform.system()}, headless={self.browser_cfg.get('headless', True)})")
         driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version)
 
-        ua = (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            if IS_MAC else
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-        )
-        driver.execute_cdp_cmd("Network.setUserAgentOverride", {"userAgent": ua})
+        self._apply_user_agent(driver)
         driver.execute_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
         logger.info("✅ Driver hazır")
         return driver
+
+    @staticmethod
+    def _apply_user_agent(driver: uc.Chrome) -> None:
+        """
+        UA + Client Hints'i çalışan Chrome'un gerçek sürümüyle eşleştirir.
+        Sabit bir sürüm (ör. Chrome/126) kurulu tarayıcıyla çelişip tespit
+        riskini artırır; headless modda ise 'HeadlessChrome' ibaresini gizler.
+        """
+        full_version = driver.capabilities.get("browserVersion", "") or "0.0.0.0"
+        major = full_version.split(".")[0]
+        platform_token = (
+            "Macintosh; Intel Mac OS X 10_15_7" if IS_MAC else "X11; Linux x86_64"
+        )
+        ua = (
+            f"Mozilla/5.0 ({platform_token}) AppleWebKit/537.36 "
+            f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+        )
+        driver.execute_cdp_cmd("Network.setUserAgentOverride", {
+            "userAgent": ua,
+            "userAgentMetadata": {
+                "brands": [
+                    {"brand": "Google Chrome", "version": major},
+                    {"brand": "Chromium",      "version": major},
+                    {"brand": "Not=A?Brand",   "version": "24"},
+                ],
+                "fullVersion":     full_version,
+                "platform":        "macOS" if IS_MAC else "Linux",
+                "platformVersion": "",
+                "architecture":    "",
+                "model":           "",
+                "mobile":          False,
+            },
+        })
+        logger.info(f"User-Agent ayarlandı: Chrome/{major} ({full_version})")
 
     def _close_driver(self) -> None:
         if self.driver:

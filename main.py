@@ -61,7 +61,8 @@ def save_session_mode(config: dict) -> None:
     Path(user_data_dir).mkdir(parents=True, exist_ok=True)
     options.add_argument(f"--user-data-dir={str(Path(user_data_dir).resolve())}")
 
-    chrome_version = config.get("browser", {}).get("version_main", 154)
+    from src.bot import resolve_chrome_version
+    chrome_version = resolve_chrome_version(config.get("browser", {}))
     logger.info("Chrome açılıyor...")
     driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version)
 

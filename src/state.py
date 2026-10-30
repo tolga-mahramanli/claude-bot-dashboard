@@ -35,6 +35,8 @@ class BotState:
 
     # Son N log satırı (canlı log akışı için)
     _log_buffer: deque = field(default_factory=lambda: deque(maxlen=300))
+    # Toplam eklenen log sayısı (monoton artar; buffer dolsa da sıfırlanmaz)
+    _log_seq: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     # ── Durum güncelleme metodları ────────────────────────────
@@ -82,11 +84,25 @@ class BotState:
     def add_log(self, line: str) -> None:
         with self._lock:
             self._log_buffer.append(line)
+            self._log_seq += 1
 
     def get_logs(self, last_n: int = 100) -> list[str]:
         with self._lock:
             buf = list(self._log_buffer)
         return buf[-last_n:]
+
+    def get_logs_since(self, seq: int) -> tuple[int, list[str]]:
+        """
+        `seq` sırasından sonra eklenen logları döndürür.
+        Returns: (güncel_seq, yeni_satırlar). Buffer'dan taşan eski satırlar atlanır.
+        """
+        with self._lock:
+            current = self._log_seq
+            buf = list(self._log_buffer)
+        missed = current - seq
+        if missed <= 0:
+            return current, []
+        return current, buf[-missed:]
 
     # ── JSON serileştirme ─────────────────────────────────────
 
