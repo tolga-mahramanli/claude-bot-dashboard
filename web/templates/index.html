@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Bot Dashboard</title>
+  <meta name="description" content="Claude.ai otomasyon botu kontrol paneli" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Tokens ───────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep:    #0a0c14;
+      --bg-card:    #111827;
+      --bg-input:   #1a2236;
+      --bg-hover:   #1e2d47;
+      --border:     rgba(99, 130, 190, 0.15);
+      --border-act: rgba(99, 130, 190, 0.4);
+
+      --accent:     #4f8ef7;
+      --accent-2:   #7c6af7;
+      --green:      #22c55e;
+      --yellow:     #eab308;
+      --red:        #ef4444;
+      --orange:     #f97316;
+
+      --text-1:     #f1f5f9;
+      --text-2:     #94a3b8;
+      --text-3:     #475569;
+
+      --radius-sm:  6px;
+      --radius:     12px;
+      --radius-lg:  18px;
+
+      --shadow:     0 4px 24px rgba(0,0,0,.4);
+      --shadow-glow: 0 0 30px rgba(79,142,247,.12);
+
+      --transition: 180ms ease;
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: var(--bg-deep);
+      color: var(--text-1);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── Scrollbar ─────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-act); border-radius: 99px; }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-rows: 64px 1fr;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      background: rgba(17,24,39,.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--text-1);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      box-shadow: 0 0 16px rgba(79,142,247,.4);
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-2);
+    }
+
+    /* ── Sidebar ────────────────────────────────────────────── */
+    aside {
+      padding: 24px 16px;
+      border-right: 1px solid var(--border);
+      background: rgba(17,24,39,.5);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 4px 12px 8px;
+      margin-top: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-2);
+      font-weight: 500;
+      transition: var(--transition);
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+    .nav-item.active {
+      background: rgba(79,142,247,.1);
+      border-color: rgba(79,142,247,.2);
+      color: var(--accent);
+    }
+
+    .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    /* ── Main Content ──────────────────────────────────────── */
+    main {
+      padding: 28px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .section { display: none; flex-direction: column; gap: 20px; }
+    .section.active { display: flex; }
+
+    /* ── Cards ─────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Status Grid ────────────────────────────────────────── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .stat-card:hover { border-color: var(--border-act); box-shadow: var(--shadow-glow); }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    /* ── Status Badge ───────────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .badge-idle    { background: rgba(148,163,184,.1); color: var(--text-2); }
+    .badge-running { background: rgba(79,142,247,.15); color: var(--accent); }
+    .badge-success { background: rgba(34,197,94,.12);  color: var(--green); }
+    .badge-error   { background: rgba(239,68,68,.12);  color: var(--red); }
+    .badge-no_session { background: rgba(249,115,22,.12); color: var(--orange); }
+
+    .dot-idle    { background: var(--text-3); }
+    .dot-running { background: var(--accent); animation: pulse 1s infinite; }
+    .dot-success { background: var(--green); }
+    .dot-error   { background: var(--red); }
+    .dot-no_session { background: var(--orange); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(1.4); }
+    }
+
+    /* ── Log Viewer ─────────────────────────────────────────── */
+    .log-container {
+      background: #080d18;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      height: 380px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.INFO    { color: #7dd3fc; }
+    .log-line.WARNING { color: var(--yellow); }
+    .log-line.ERROR   { color: var(--red); }
+    .log-line.DEBUG   { color: var(--text-3); }
+    .log-line.CRITICAL{ color: #f0abfc; }
+
+    .log-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .log-live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* ── Forms ──────────────────────────────────────────────── */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: .04em;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    textarea,
+    select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text-1);
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color var(--transition);
+      outline: none;
+      width: 100%;
+      resize: vertical;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79,142,247,.12);
+    }
+
+    textarea { min-height: 120px; }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    /* ── Cron Jobs ──────────────────────────────────────────── */
+    .job-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .job-item {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+    }
+
+    .job-item-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .job-id-input {
+      flex: 1;
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      color: var(--text-2);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Saat Seçici ─────────────────────────── */
+    .time-picker-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .time-display {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-deep);
+      border: 1px solid var(--border-act);
+      border-radius: var(--radius-sm);
+      padding: 6px 14px;
+    }
+
+    .time-icon { font-size: 16px; }
+
+    input[type="time"] {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+      width: 100px;
+    }
+
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.6) sepia(1) hue-rotate(190deg);
+      cursor: pointer;
+    }
+
+    /* ── Gün Seçici ──────────────────────────── */
+    .day-picker { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+
+    .day-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-deep);
+      color: var(--text-3);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: grid;
+      place-items: center;
+      user-select: none;
+    }
+
+    .day-btn:hover  { border-color: var(--accent); color: var(--accent); }
+    .day-btn.active { background: rgba(79,142,247,.18); border-color: var(--accent); color: var(--accent); }
+
+    .day-preset {
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--bg-deep);
+      color: var(--text-2);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .day-preset:hover  { border-color: var(--accent); color: var(--accent); }
+    .day-preset.active { background: rgba(79,142,247,.18); border-color: var(--accent); color: var(--accent); }
+
+    .cron-preview {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-3);
+      padding: 4px 8px;
+      background: var(--bg-deep);
+      border-radius: 4px;
+      margin-left: auto;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-deep);
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      height: 13px;
+      width: 13px;
+      left: 3px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--text-3);
+      border-radius: 50%;
+      transition: var(--transition);
+    }
+
+    input:checked + .toggle-slider { background: rgba(79,142,247,.2); border-color: var(--accent); }
+    input:checked + .toggle-slider::before { transform: translate(16px, -50%); background: var(--accent); }
+
+    /* ── Buttons ────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: var(--transition);
+      outline: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 16px rgba(79,142,247,.3);
+    }
+
+    .btn-primary:hover {
+      background: #3b7df4;
+      box-shadow: 0 0 24px rgba(79,142,247,.5);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-input);
+      color: var(--text-1);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-act); }
+
+    .btn-danger {
+      background: rgba(239,68,68,.12);
+      color: var(--red);
+      border-color: rgba(239,68,68,.2);
+    }
+
+    .btn-danger:hover { background: rgba(239,68,68,.2); }
+
+    .btn-success {
+      background: rgba(34,197,94,.12);
+      color: var(--green);
+      border-color: rgba(34,197,94,.25);
+    }
+
+    .btn-success:hover { background: rgba(34,197,94,.22); }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    /* ── Screenshot Galerisi ─────────────────────────────────────────── */
+    .screenshot-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .screenshot-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--bg-deep);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .screenshot-item:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .screenshot-img-wrap {
+      aspect-ratio: 16/9;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+    }
+
+    .screenshot-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+
+    .screenshot-img-wrap img:hover {
+      transform: scale(1.05);
+    }
+
+    .screenshot-meta {
+      padding: 10px;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .screenshot-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--accent);
+      word-break: break-all;
+    }
+    
+    .screenshot-date {
+      color: var(--text-3);
+    }
+
+    .no-screenshot {
+      color: var(--text-3);
+      font-size: 13px;
+      text-align: center;
+      padding: 40px;
+      width: 100%;
+    }
+
+    /* ── Toast ──────────────────────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 9999;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: var(--shadow);
+      animation: slideIn .25s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 340px;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .toast-success { background: rgba(34,197,94,.15);  color: var(--green);  border: 1px solid rgba(34,197,94,.3); }
+    .toast-error   { background: rgba(239,68,68,.15);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+    .toast-info    { background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
+
+    /* ── Next Run Bar ────────────────────────────────────────── */
+    .next-run-bar {
+      background: rgba(79,142,247,.06);
+      border: 1px solid rgba(79,142,247,.15);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .next-run-label { color: var(--text-2); font-weight: 500; }
+    .next-run-time  { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 600; }
+
+    /* ── Error Box ───────────────────────────────────────────── */
+    .error-box {
+      background: rgba(239,68,68,.06);
+      border: 1px solid rgba(239,68,68,.2);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--red);
+      word-break: break-all;
+    }
+
+    /* ── Job Seçici Dropdown ───────────────────────────── */
+    .run-now-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .job-select {
+      flex: 1;
+      min-width: 180px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-act);
+      border-radius: var(--radius-sm);
+      color: var(--text-1);
+      padding: 9px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .job-select:hover, .job-select:focus {
+      border-color: var(--accent);
+    }
+
+    .job-select option {
+      background: var(--bg-card);
+      color: var(--text-1);
+    }
+
+    /* ── Job Overview Listesi ──────────────────────────── */
+    .job-overview-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .job-overview-item:last-child { border-bottom: none; }
+
+    .job-overview-info { display: flex; flex-direction: column; gap: 4px; }
+
+    .job-overview-name {
+      font-weight: 600;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .job-badge-active {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(34,197,94,.15);
+      border: 1px solid rgba(34,197,94,.3);
+      border-radius: 20px;
+      color: var(--green);
+    }
+
+    .job-badge-inactive {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(100,116,139,.15);
+      border: 1px solid rgba(100,116,139,.3);
+      border-radius: 20px;
+      color: var(--text-3);
+    }
+
+    .job-overview-meta {
+      font-size: 11px;
+      color: var(--text-3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .job-overview-prompt {
+      font-size: 11px;
+      color: var(--text-2);
+      font-style: italic;
+      max-width: 360px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 56px auto 1fr; }
+      aside { display: none; }
+      main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🤖</div>
+      Claude Bot
+      <span style="font-size:11px;font-weight:400;color:var(--text-3);margin-left:4px;">Dashboard</span>
+    </div>
+    <div class="header-meta">
+      <span class="clock" id="clock">--:--:--</span>
+      <span id="header-badge" class="status-badge badge-idle">
+        <span class="status-dot dot-idle"></span>
+        Bekliyor
+      </span>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ───────────────────────────────────────────── -->
+  <aside>
+    <div class="nav-label">Genel</div>
+    <div class="nav-item active" data-section="overview" id="nav-overview">
+      <span class="nav-icon">📊</span> Genel Bakış
+    </div>
+    <div class="nav-item" data-section="logs" id="nav-logs">
+      <span class="nav-icon">📋</span> Loglar
+    </div>
+    <div class="nav-label">Yönetim</div>
+    <div class="nav-item" data-section="config" id="nav-config">
+      <span class="nav-icon">⚙️</span> Konfigürasyon
+    </div>
+    <div class="nav-item" data-section="screenshot" id="nav-screenshot">
+      <span class="nav-icon">📸</span> Screenshot
+    </div>
+  </aside>
+
+  <!-- ── Main ──────────────────────────────────────────────── -->
+  <main>
+
+    <!-- ════════════════════════════════════════════════════
+         SECTION: GENEL BAKIŞ
+    ════════════════════════════════════════════════════ -->
+    <section class="section active" id="section-overview">
+
+      <!-- Stat Grid -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Durum</div>
+          <div style="margin-top:4px;" id="status-badge-main">
+            <span class="status-badge badge-idle">
+              <span class="status-dot dot-idle"></span>Bekliyor
+            </span>
+          </div>
+          <div class="stat-sub" id="stat-last-run">Son çalışma: —</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Toplam Çalışma</div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-sub">görev</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Başarılı</div>
+          <div class="stat-value" style="color:var(--green)" id="stat-success">0</div>
+          <div class="stat-sub">görev</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Hatalı</div>
+          <div class="stat-value" style="color:var(--red)" id="stat-error">0</div>
+          <div class="stat-sub">görev</div>
+        </div>
+      </div>
+
+      <!-- Sonraki çalışma -->
+      <div class="next-run-bar">
+        <span class="next-run-label">⏰ Sonraki zamanlanmış çalışma</span>
+        <span class="next-run-time" id="next-run-time">—</span>
+      </div>
+
+      <!-- Son hata -->
+      <div id="error-section" style="display:none;">
+        <div class="card-title" style="color:var(--red);">⚠️ Son Hata</div>
+        <div class="error-box" id="last-error-box">—</div>
+      </div>
+
+      <!-- Hızlı eylemler -->
+      <div class="card">
+        <div class="card-title">⚡ Hızlı Eylemler</div>
+
+        <!-- Şimdi Çalıştır + Job Seçici -->
+        <div class="run-now-group" style="margin-bottom:14px;">
+          <select class="job-select" id="run-now-job-select">
+            <option value="">--- Görev seçin ---</option>
+          </select>
+          <button class="btn btn-primary" id="btn-run-now" onclick="runNow()">
+            ▶ Şimdi Çalıştır
+          </button>
+        </div>
+        <div id="run-now-preview" style="font-size:11px;color:var(--text-3);min-height:16px;margin-bottom:10px;"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="refreshStatus()">
+            ↺ Durumu Yenile
+          </button>
+          <button class="btn btn-secondary" onclick="navigateTo('logs')">
+            📋 Loglara Git
+          </button>
+          <button class="btn btn-secondary" onclick="navigateTo('screenshot')">
+            📸 Screenshot'a Git
+          </button>
+        </div>
+      </div>
+
+      <!-- Aktif Job'lar -->
+      <div class="card">
+        <div class="card-title">🗂️ Zamanlanmış Görevler</div>
+        <div id="job-list-overview" style="color:var(--text-2);font-size:13px;">Yükleniyor...</div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         SECTION: LOGLAR
+    ════════════════════════════════════════════════════ -->
+    <section class="section" id="section-logs">
+      <div class="card" style="flex:1;">
+        <div class="log-toolbar">
+          <div class="card-title" style="margin-bottom:0">📋 Canlı Loglar</div>
+          <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+            <div class="log-live-badge" id="live-indicator">
+              <div class="live-dot"></div> CANLI
+            </div>
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="clearLogs()">Temizle</button>
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="toggleAutoScroll()">
+              <span id="autoscroll-label">↓ Otomatik Kaydır: Açık</span>
+            </button>
+          </div>
+        </div>
+        <div class="log-container" id="log-viewer"></div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         SECTION: KONFİGÜRASYON
+    ════════════════════════════════════════════════════ -->
+    <section class="section" id="section-config">
+      <div class="card">
+        <div class="card-title">⚙️ Bot Konfigürasyonu</div>
+
+        <form id="config-form" onsubmit="saveConfig(event)">
+
+          <div class="form-group" style="display:none;">
+            <!-- Global chat_id ve prompt artık job bazında ayarlanır -->
+          </div>
+
+          <div class="form-group">
+            <label for="input-timezone">Timezone</label>
+            <select id="input-timezone">
+              <option value="Europe/Istanbul">Europe/Istanbul (TR)</option>
+              <option value="UTC">UTC</option>
+              <option value="Europe/London">Europe/London</option>
+              <option value="America/New_York">America/New_York</option>
+              <option value="America/Los_Angeles">America/Los_Angeles</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="input-headless" style="width:auto;margin-right:6px;" />
+              Headless mod (tarayıcı penceresi görünmesin)
+            </label>
+          </div>
+
+          <hr class="divider" style="margin:20px 0;" />
+
+          <!-- Zamanlanmış Görevler -->
+          <div class="card-title">⏰ Zamanlanmış Görevler</div>
+          <div class="form-hint" style="margin-bottom:12px;">
+            Her görevin kendi saati, chat kanalı ve promptu olabilir.
+          </div>
+          <div class="job-list" id="job-list-config"></div>
+          <div class="btn-row" style="margin-top:14px;">
+            <button type="button" class="btn btn-secondary" onclick="addJob()">＋ Yeni Görev Ekle</button>
+          </div>
+
+          <hr class="divider" style="margin:20px 0;" />
+
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary" id="btn-save-config">💾 Kaydet & Uygula</button>
+            <button type="button" class="btn btn-secondary" onclick="loadConfig()">↺ Geri Al</button>
+          </div>
+
+        </form>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         SECTION: SCREENSHOT
+    ════════════════════════════════════════════════════ -->
+    <section class="section" id="section-screenshot">
+      <div class="card">
+        <div class="card-title">
+          📸 Ekran Görüntüleri Galerisi
+          <button class="btn btn-secondary" style="margin-left:auto;padding:5px 12px;font-size:12px;" onclick="loadScreenshot()">↺ Yenile</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:14px;">
+          Tüm başarılı ve hatalı görevlerin ekran görüntüleri (son 7 gün). Tam boyutta görmek için görsele tıklayın.
+        </div>
+        <div class="screenshot-gallery" id="screenshot-gallery">
+          <div class="no-screenshot">🖼️ Yükleniyor...</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── Toast Container ──────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ════════════════════════════════════════════════════════════
+     JavaScript
+════════════════════════════════════════════════════════════ -->
+<script>
+  // ── State ──────────────────────────────────────────────────
+  let currentSection = 'overview';
+  let autoScroll = true;
+  let eventSource = null;
+
+  // ── Navigation ─────────────────────────────────────────────
+  function navigateTo(section) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+    document.getElementById(`section-${section}`).classList.add('active');
+    document.getElementById(`nav-${section}`)?.classList.add('active');
+    currentSection = section;
+
+    if (section === 'logs' && !eventSource) startLogStream();
+    if (section === 'screenshot') loadScreenshot();
+    if (section === 'config') loadConfig();
+  }
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => navigateTo(item.dataset.section));
+  });
+
+  // ── Clock ──────────────────────────────────────────────────
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toLocaleTimeString('tr-TR');
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ── Toast ──────────────────────────────────────────────────
+  function showToast(msg, type = 'info', duration = 3500) {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+    t.className = `toast toast-${type}`;
+    t.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> ${msg}`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), duration);
+  }
+
+  // ── Status Badges ──────────────────────────────────────────
+  const STATUS_MAP = {
+    idle:       { label: 'Bekliyor',    badge: 'badge-idle',       dot: 'dot-idle' },
+    running:    { label: 'Çalışıyor',   badge: 'badge-running',    dot: 'dot-running' },
+    success:    { label: 'Başarılı',    badge: 'badge-success',    dot: 'dot-success' },
+    error:      { label: 'Hata',        badge: 'badge-error',      dot: 'dot-error' },
+    no_session: { label: 'Session Yok', badge: 'badge-no_session', dot: 'dot-no_session' },
+  };
+
+  function renderBadge(status) {
+    const s = STATUS_MAP[status] || STATUS_MAP.idle;
+    return `<span class="status-badge ${s.badge}">
+      <span class="status-dot ${s.dot}"></span>${s.label}
+    </span>`;
+  }
+
+  function formatDatetime(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('tr-TR', { dateStyle:'short', timeStyle:'short' });
+  }
+
+  // ── Status Refresh ─────────────────────────────────────────
+  async function refreshStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+
+      // Header badge
+      document.getElementById('header-badge').outerHTML =
+        `<span id="header-badge" class="status-badge ${STATUS_MAP[data.status]?.badge || 'badge-idle'}">
+          <span class="status-dot ${STATUS_MAP[data.status]?.dot || 'dot-idle'}"></span>
+          ${STATUS_MAP[data.status]?.label || 'Bekliyor'}
+        </span>`;
+
+      // Overview badges + stats
+      document.getElementById('status-badge-main').innerHTML = renderBadge(data.status);
+      document.getElementById('stat-last-run').textContent =
+        `Son çalışma: ${formatDatetime(data.last_run)}`;
+      document.getElementById('stat-total').textContent   = data.stats?.total   ?? 0;
+      document.getElementById('stat-success').textContent = data.stats?.success ?? 0;
+      document.getElementById('stat-error').textContent   = data.stats?.error   ?? 0;
+
+      // Next run
+      document.getElementById('next-run-time').textContent = data.next_run
+        ? formatDatetime(data.next_run)
+        : (data.scheduler?.jobs?.[0]?.next_run ? formatDatetime(data.scheduler.jobs[0].next_run) : '—');
+
+      // Error
+      const errSection = document.getElementById('error-section');
+      if (data.last_error) {
+        errSection.style.display = 'block';
+        document.getElementById('last-error-box').textContent = data.last_error;
+      } else {
+        errSection.style.display = 'none';
+      }
+
+      // Run Now button state
+      const runBtn = document.getElementById('btn-run-now');
+      runBtn.disabled = data.status === 'running';
+      runBtn.textContent = data.status === 'running' ? '⏳ Çalışıyor...' : '▶ Şimdi Çalıştır';
+
+      // Job listesini /api/jobs'dan detaylı al
+      try {
+        const jobsRes = await fetch('/api/jobs');
+        const jobsData = await jobsRes.json();
+        renderJobList(jobsData.jobs || []);
+      } catch (e) {
+        console.error('Jobs fetch error:', e);
+      }
+
+    } catch (err) {
+      console.error('Status refresh error:', err);
+    }
+  }
+
+  function renderJobList(jobs) {
+    const el = document.getElementById('job-list-overview');
+    const select = document.getElementById('run-now-job-select');
+
+    // 1. Overview Listesi
+    if (!jobs.length) {
+      el.innerHTML = '<span style="color:var(--text-3)">Kayıtlı görev yok</span>';
+    } else {
+      el.innerHTML = jobs.map(j => {
+        const badge = j.enabled 
+          ? `<span class="job-badge-active">Aktif</span>` 
+          : `<span class="job-badge-inactive">Pasif</span>`;
+        
+        const nextRun = j.enabled && j.next_run 
+          ? `Sonraki: ${formatDatetime(j.next_run)}` 
+          : (j.enabled ? 'Bekleniyor...' : 'Çalışmayacak');
+
+        return `
+          <div class="job-overview-item">
+            <div class="job-overview-info">
+              <div class="job-overview-name">
+                ${j.id} ${badge}
+              </div>
+              <div class="job-overview-meta">
+                ⌛ ${j.cron || 'Belirtilmemiş'} | 💬 ${j.chat_id ? j.chat_id.substring(0,8) + '...' : 'Global'}
+              </div>
+              <div class="job-overview-prompt" title="${j.prompt_preview || ''}">
+                "${j.prompt_preview || 'Global prompt kullanılacak'}"
+              </div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);text-align:right;">
+              ${nextRun}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 2. Dropdown Listesi (Sadece yeni geleni ekle, mevcut seçimi korumaya çalış)
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">--- Global (veya İlk Aktif Görev) ---</option>';
+    jobs.forEach(j => {
+      const opt = document.createElement('option');
+      opt.value = j.id;
+      opt.textContent = `${j.id} ${j.enabled ? '' : '(Pasif)'}`;
+      select.appendChild(opt);
+    });
+    if (currentVal && jobs.find(j => j.id === currentVal)) {
+      select.value = currentVal;
+    }
+  }
+
+  // ── Run Now ────────────────────────────────────────────────
+  async function runNow() {
+    const btn = document.getElementById('btn-run-now');
+    const select = document.getElementById('run-now-job-select');
+    const jobId = select.value;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Başlatılıyor...';
+    try {
+      const url = jobId ? `/api/run-now?job_id=${encodeURIComponent(jobId)}` : '/api/run-now';
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+      
+      if (res.ok) {
+        showToast(data.message || 'Bot görevi başlatıldı!', 'success');
+        setTimeout(refreshStatus, 1500);
+      } else {
+        showToast(data.detail || 'Hata oluştu', 'error');
+        btn.disabled = false;
+        btn.textContent = '▶ Şimdi Çalıştır';
+      }
+    } catch (err) {
+      showToast('Sunucuya bağlanılamadı', 'error');
+      btn.disabled = false;
+      btn.textContent = '▶ Şimdi Çalıştır';
+    }
+  }
+
+  // ── Log Stream (SSE) ───────────────────────────────────────
+  function startLogStream() {
+    if (eventSource) return;
+    eventSource = new EventSource('/api/logs/stream');
+    const viewer = document.getElementById('log-viewer');
+
+    eventSource.onmessage = (e) => {
+      if (!e.data.trim()) return;
+      const line = document.createElement('div');
+      line.className = 'log-line ' + getLogLevel(e.data);
+      line.textContent = e.data;
+      viewer.appendChild(line);
+      if (autoScroll) viewer.scrollTop = viewer.scrollHeight;
+
+      // Max 500 satır tut
+      while (viewer.children.length > 500) viewer.removeChild(viewer.firstChild);
+    };
+
+    eventSource.onerror = () => {
+      document.getElementById('live-indicator').innerHTML =
+        '<div style="width:6px;height:6px;background:var(--red);border-radius:50%;"></div> Bağlantı Kesildi';
+    };
+  }
+
+  function getLogLevel(line) {
+    if (line.includes('| ERROR')) return 'ERROR';
+    if (line.includes('| WARNING')) return 'WARNING';
+    if (line.includes('| DEBUG')) return 'DEBUG';
+    if (line.includes('| CRITICAL')) return 'CRITICAL';
+    return 'INFO';
+  }
+
+  function clearLogs() {
+    document.getElementById('log-viewer').innerHTML = '';
+  }
+
+  function toggleAutoScroll() {
+    autoScroll = !autoScroll;
+    document.getElementById('autoscroll-label').textContent =
+      `↓ Otomatik Kaydır: ${autoScroll ? 'Açık' : 'Kapalı'}`;
+  }
+
+  // ── Config Load ────────────────────────────────────────────
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+
+      document.getElementById('input-headless').checked = cfg.headless ?? true;
+      document.getElementById('input-timezone').value = cfg.timezone || 'Europe/Istanbul';
+
+      renderConfigJobs(cfg.jobs || []);
+
+    } catch (err) {
+      showToast('Config yüklenemedi', 'error');
+    }
+  }
+
+  let jobCounter = 0;
+
+  // ── Gün sabitleri ──────────────────────────────────────────
+  const DAYS = [
+    { label: 'Pzt', value: 1 },
+    { label: 'Sal', value: 2 },
+    { label: 'Çar', value: 3 },
+    { label: 'Per', value: 4 },
+    { label: 'Cum', value: 5 },
+    { label: 'Cmt', value: 6 },
+    { label: 'Paz', value: 0 },
+  ];
+
+  // ── Cron ↔ {time, days} dönüşümleri ───────────────────────
+  function cronToSimple(cron) {
+    // "30 9 * * 1-5" → { time: "09:30", days: [1,2,3,4,5] }
+    try {
+      const parts = cron.trim().split(/\s+/);
+      if (parts.length !== 5) return { time: '09:00', days: [0,1,2,3,4,5,6] };
+      const [min, hour] = parts;
+      const dowPart = parts[4];
+
+      const h = String(parseInt(hour)).padStart(2, '0');
+      const m = String(parseInt(min)).padStart(2, '0');
+      const time = `${h}:${m}`;
+
+      let days = [];
+      if (dowPart === '*') {
+        days = [0,1,2,3,4,5,6];
+      } else if (dowPart === '1-5') {
+        days = [1,2,3,4,5];
+      } else if (dowPart === '0,6' || dowPart === '6,0') {
+        days = [0,6];
+      } else {
+        days = dowPart.split(',').map(Number).filter(n => !isNaN(n));
+        // "1-5" range desteği
+        if (dowPart.includes('-') && !days.length) {
+          const [s, e] = dowPart.split('-').map(Number);
+          for (let i = s; i <= e; i++) days.push(i);
+        }
+      }
+      return { time, days };
+    } catch { return { time: '09:00', days: [0,1,2,3,4,5,6] }; }
+  }
+
+  function simpleToCron(time, days) {
+    // { time: "09:30", days: [1,2,3,4,5] } → "30 9 * * 1,2,3,4,5"
+    const [h, m] = time.split(':').map(Number);
+    const allDays = days.length === 7;
+    const weekdays = [1,2,3,4,5].every(d => days.includes(d)) && days.length === 5;
+    const weekend  = [0,6].every(d => days.includes(d))  && days.length === 2;
+
+    let dow;
+    if (allDays)   dow = '*';
+    else if (weekdays) dow = '1-5';
+    else if (weekend)  dow = '0,6';
+    else           dow = [...days].sort((a,b)=>a-b).join(',');
+
+    return `${m} ${h} * * ${dow}`;
+  }
+
+  // ── Job satırı oluştur ─────────────────────────────────────
+  function renderConfigJobs(jobs) {
+    const el = document.getElementById('job-list-config');
+    el.innerHTML = '';
+    if (!jobs.length) { addJobRow({ id: 'job_1', cron: '0 9 * * *', enabled: true }); return; }
+    jobs.forEach(job => addJobRow(job));
+  }
+
+  function addJob() {
+    addJobRow({ id: `gorev_${++jobCounter}`, cron: '0 9 * * *', enabled: true });
+  }
+
+  function addJobRow(job) {
+    const el = document.getElementById('job-list-config');
+    const rowId = `job_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+    const { time, days } = cronToSimple(job.cron || '0 9 * * *');
+
+    const div = document.createElement('div');
+    div.className = 'job-item';
+    div.id = rowId;
+
+    const dayBtns = DAYS.map(d => `
+      <button type="button"
+        class="day-btn ${days.includes(d.value) ? 'active' : ''}"
+        data-day="${d.value}"
+        onclick="toggleDay(this, '${rowId}')"
+        title="${d.label}">${d.label}</button>
+    `).join('');
+
+    div.innerHTML = `
+      <!-- Başlık: isim + aktif + sil -->
+      <div class="job-item-header">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;">GÖREV İSMİ</span>
+        <input type="text" class="job-id-input" value="${job.id || ''}" placeholder="gorev_adi" />
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;color:var(--text-3);">Aktif</span>
+          <label class="toggle-switch">
+            <input type="checkbox" ${job.enabled !== false ? 'checked' : ''} onchange="updateCronPreview('${rowId}')" />
+            <span class="toggle-slider"></span>
+          </label>
+          <button type="button" class="btn btn-danger" style="padding:5px 10px;font-size:13px;"
+            onclick="document.getElementById('${rowId}').remove()">✕</button>
+        </div>
+      </div>
+
+      <!-- Chat ID -->
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;min-width:60px;">CHAT ID</span>
+        <input type="text" class="job-chat-id-input" value="${job.chat_id || ''}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          style="flex:1;min-width:200px;font-family:'JetBrains Mono',monospace;font-size:12px;" />
+        <span style="font-size:11px;color:var(--text-3);">claude.ai/chat/<b>ID</b></span>
+      </div>
+
+      <!-- Prompt -->
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;min-width:60px;padding-top:8px;">PROMPT</span>
+        <textarea class="job-prompt-input" rows="3"
+          placeholder="Bu görev için gönderilecek mesaj..."
+          style="flex:1;min-width:200px;resize:vertical;">${job.prompt || ''}</textarea>
+      </div>
+
+      <!-- Saat -->
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;min-width:60px;">SAAT</span>
+        <div class="time-display">
+          <span class="time-icon">🕐</span>
+          <input type="time" value="${time}" onchange="updateCronPreview('${rowId}')" />
+        </div>
+        <div class="cron-preview" id="preview_${rowId}">⌛ ${job.cron || '0 9 * * *'}</div>
+      </div>
+
+      <!-- Gün -->
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;min-width:60px;padding-top:8px;">GÜN</span>
+        <div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button type="button" class="day-preset" onclick="setDayPreset('${rowId}', 'all')">Her Gün</button>
+            <button type="button" class="day-preset" onclick="setDayPreset('${rowId}', 'weekdays')">Hafta İçi</button>
+            <button type="button" class="day-preset" onclick="setDayPreset('${rowId}', 'weekend')">Hafta Sonu</button>
+          </div>
+          <div class="day-picker">${dayBtns}</div>
+        </div>
+      </div>
+    `;
+
+    el.appendChild(div);
+    updateCronPreview(rowId);
+  }
+
+  // ── Gün seçimi işlemleri ──────────────────────────────────
+  function toggleDay(btn, rowId) {
+    btn.classList.toggle('active');
+    updateCronPreview(rowId);
+  }
+
+  function setDayPreset(rowId, preset) {
+    const row = document.getElementById(rowId);
+    const btns = row.querySelectorAll('.day-btn');
+    btns.forEach(b => {
+      const d = parseInt(b.dataset.day);
+      let active = false;
+      if (preset === 'all')      active = true;
+      else if (preset === 'weekdays') active = d >= 1 && d <= 5;
+      else if (preset === 'weekend')  active = d === 0 || d === 6;
+      b.classList.toggle('active', active);
+    });
+    updateCronPreview(rowId);
+  }
+
+  function updateCronPreview(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const timeInput = row.querySelector('input[type="time"]');
+    const activeDays = [...row.querySelectorAll('.day-btn.active')].map(b => parseInt(b.dataset.day));
+    const cron = simpleToCron(timeInput?.value || '09:00', activeDays.length ? activeDays : [0,1,2,3,4,5,6]);
+    const prev = document.getElementById(`preview_${rowId}`);
+    if (prev) prev.textContent = `⌛ ${cron}`;
+  }
+
+  // ── Config Save ────────────────────────────────────────────
+  async function saveConfig(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btn-save-config');
+    btn.disabled = true;
+    btn.textContent = '⏳ Kaydediliyor...';
+
+    // Job'ları topla — saat+gün → cron
+    const jobItems = document.querySelectorAll('#job-list-config .job-item');
+    const jobs = Array.from(jobItems).map(item => {
+      const idInput      = item.querySelector('.job-id-input');
+      const chatIdInput  = item.querySelector('.job-chat-id-input');
+      const promptInput  = item.querySelector('.job-prompt-input');
+      const timeInput    = item.querySelector('input[type="time"]');
+      const checkbox     = item.querySelector('input[type="checkbox"]');
+      const activeDays   = [...item.querySelectorAll('.day-btn.active')].map(b => parseInt(b.dataset.day));
+
+      const time = timeInput?.value || '09:00';
+      const days = activeDays.length ? activeDays : [0,1,2,3,4,5,6];
+
+      return {
+        id:      idInput?.value.trim()     || 'gorev',
+        chat_id: chatIdInput?.value.trim() || '',
+        prompt:  promptInput?.value        || '',
+        cron:    simpleToCron(time, days),
+        enabled: checkbox?.checked ?? true,
+      };
+    });
+
+    const payload = {
+      jobs,
+      timezone: document.getElementById('input-timezone').value,
+      headless: document.getElementById('input-headless').checked,
+    };
+
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('✅ Konfigürasyon kaydedildi ve scheduler güncellendi!', 'success');
+        setTimeout(refreshStatus, 1000);
+      } else {
+        showToast(data.detail || 'Kaydetme hatası', 'error');
+      }
+    } catch (err) {
+      showToast('Sunucuya bağlanılamadı', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '💾 Kaydet & Uygula';
+    }
+  }
+
+  // ── Screenshot ─────────────────────────────────────────────
+  async function loadScreenshot() {
+    const gallery = document.getElementById('screenshot-gallery');
+    gallery.innerHTML = '<div class="no-screenshot">⏳ Yükleniyor...</div>';
+    
+    try {
+      const res = await fetch('/api/screenshots/list');
+      const data = await res.json();
+      const shots = data.screenshots || [];
+      
+      if (shots.length === 0) {
+        gallery.innerHTML = `
+          <div class="no-screenshot">
+            🖼️ Henüz ekran görüntüsü yok<br>
+            <span style="font-size:11px;">Bot bir görev çalıştırdığında burada görünecek</span>
+          </div>`;
+        return;
+      }
+      
+      gallery.innerHTML = shots.map(s => {
+        const dateStr = new Date(s.timestamp * 1000).toLocaleString('tr-TR');
+        return `
+          <div class="screenshot-item">
+            <div class="screenshot-img-wrap">
+              <img src="${s.url}" alt="${s.filename}" onclick="window.open('${s.url}', '_blank')" />
+            </div>
+            <div class="screenshot-meta">
+              <span class="screenshot-label">${s.filename}</span>
+              <span class="screenshot-date">🕒 ${dateStr}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+    } catch (err) {
+      gallery.innerHTML = '<div class="no-screenshot">⚠️ Ekran görüntüleri yüklenemedi</div>';
+    }
+  }
+
+  // ── Init ───────────────────────────────────────────────────
+  refreshStatus();
+  setInterval(refreshStatus, 8000);  // 8 sn'de bir status güncelle
+
+  // Logs sekmesine ilk girişte geçmiş logları yükle
+  document.getElementById('nav-logs').addEventListener('click', async () => {
+    const viewer = document.getElementById('log-viewer');
+    if (viewer.children.length === 0) {
+      try {
+        const res = await fetch('/api/logs?n=200');
+        const data = await res.json();
+        data.logs.forEach(line => {
+          const el = document.createElement('div');
+          el.className = 'log-line ' + getLogLevel(line);
+          el.textContent = line;
+          viewer.appendChild(el);
+        });
+        viewer.scrollTop = viewer.scrollHeight;
+      } catch {}
+    }
+    startLogStream();
+  });
+</script>
+</body>
+</html>

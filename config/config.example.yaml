@@ -1,0 +1,42 @@
+# Bu dosyayı kopyalayın:  cp config/config.example.yaml config/config.yaml
+# config.yaml git'e gönderilmez (.gitignore).
+claude:
+  base_url: https://claude.ai/chat
+  chat_id: ''          # Global varsayılan (job'da belirtilmezse)
+  prompt: ''
+scheduler:
+  jobs:
+  - id: sabah
+    cron: 0 9 * * *          # dakika saat gün ay haftanın-günü
+    enabled: true
+    chat_id: YOUR_CHAT_ID_HERE   # claude.ai/chat/<ID>
+    prompt: Merhaba! Bu otomatik bir mesajdır.
+  - id: aksam
+    cron: 0 18 * * *
+    enabled: false
+    chat_id: YOUR_CHAT_ID_HERE
+    prompt: devam et
+  timezone: Europe/Istanbul
+browser:
+  user_data_dir: ./sessions/chrome_profile
+  headless: true
+  window_size:
+    width: 1920
+    height: 1080
+  proxy: ''
+  # version_main: 154      # Kurulu Chrome ana sürümü
+timeouts:
+  page_load: 30
+  element_wait: 20
+  after_send: 5
+  between_chars: 0.05
+  response_wait: 120
+logging:
+  level: INFO
+  log_dir: ./logs
+  screenshot_dir: ./screenshots
+  max_log_files: 30
+  log_to_console: true
+session:
+  cookie_file: ./sessions/claude_cookies.json
+  storage_file: ./sessions/claude_storage.json

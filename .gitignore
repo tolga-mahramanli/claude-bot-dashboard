@@ -1,0 +1,22 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Hassas veriler — ASLA commit etmeyin
+sessions/
+config/config.yaml
+.env
+*.env
+
+# Çalışma zamanı çıktıları
+logs/
+screenshots/
+*.log
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/

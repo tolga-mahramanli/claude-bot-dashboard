@@ -1,0 +1,27 @@
+# ============================================================
+# Claude.ai Bot - Python Bağımlılıkları (v2 - Web UI dahil)
+# ============================================================
+
+# ── Browser Otomasyon ──────────────────────────────────────
+# Cloudflare bypass stealth driver
+undetected-chromedriver==3.5.5
+# WebDriverWait, selektörler
+selenium==4.21.0
+
+# ── Zamanlama ──────────────────────────────────────────────
+APScheduler==3.10.4
+pytz==2024.1
+
+# ── Web Framework (Dashboard) ──────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+# Jinja2 (HTML template rendering)
+jinja2==3.1.4
+# Pydantic (API şema doğrulama)
+pydantic==2.7.1
+
+# ── Konfigürasyon ──────────────────────────────────────────
+PyYAML==6.0.1
+
+# ── Yardımcılar ────────────────────────────────────────────
+requests==2.31.0
