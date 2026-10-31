@@ -10,7 +10,10 @@ Python tabanlı Claude.ai otomasyon botu. **FastAPI Web Dashboard** + **APSchedu
 claude-bot-dashboard/
 ├── src/
 │   ├── bot.py          # Bot motoru (Windows, Mac, Linux stealth Chrome)
-│   ├── scheduler.py    # APScheduler BackgroundScheduler
+│   ├── scheduler.py    # APScheduler: cron, tek seferlik, tekrar deneme, atlama, duraklatma
+│   ├── history.py      # Kalıcı çalışma geçmişi (SQLite)
+│   ├── prompt_vars.py  # Prompt değişkenleri ({tarih}, {gün}, {a|b} …)
+│   ├── config_store.py # config.yaml'ı yorumları koruyarak, atomik yazma
 │   ├── session.py      # Cookie / localStorage yönetimi
 │   ├── logger.py       # Rotating log + Web UI buffer
 │   └── state.py        # Thread-safe paylaşılan durum (bot ↔ web)
@@ -18,16 +21,22 @@ claude-bot-dashboard/
 │   ├── app.py          # FastAPI fabrika + lifespan (scheduler başlatma)
 │   ├── routes/
 │   │   └── api.py      # REST API + SSE endpoint'leri
-│   └── templates/
-│       └── index.html  # Tek sayfalık modern dashboard
+│   ├── templates/
+│   │   └── index.html  # Dashboard iskeleti
+│   └── static/
+│       ├── css/app.css # Tasarım sistemi (açık/koyu tema)
+│       └── js/app.js   # Dashboard istemcisi
 ├── config/
 │   ├── config.example.yaml # Örnek konfigürasyon şablonu
 │   └── config.yaml     # Kişisel ayarlarınız (.gitignore'da saklanır)
+├── tests/              # pytest testleri
+├── data/               # history.db — çalışma geçmişi (git'e gitmez)
 ├── sessions/           # Cookie + Chrome profil (git'e gitmez)
 ├── logs/               # Log dosyaları
 ├── screenshots/        # Hata ve başarı ekran görüntüleri
 ├── main.py             # Giriş noktası (Web UI / Run-once / Save-session)
 ├── requirements.txt    # Python bağımlılıkları
+├── requirements-dev.txt # + test bağımlılıkları (pytest)
 ├── ecosystem.config.js # PM2 konfigürasyonu (Cross-platform)
 ├── setup.bat           # Windows tek tıkla otomatik kurulum
 ├── start.bat           # Windows tek tıkla başlatma
@@ -111,16 +120,22 @@ claude:
 scheduler:
   jobs:
     - id: "sabah-raporu"
-      cron: "0 9 * * *"            # Her gün 09:00 (dakika saat gün ay haftanın-günü)
+      cron: "0 9 * * 1-5"          # Hafta içi 09:00 (dakika saat gün ay haftanın-günü; 0=Pazar)
       enabled: true
       chat_id: "YOUR_CHAT_ID_HERE" # claude.ai/chat/<ID> adresindeki UUID
-      prompt: "Günlük özeti hazırla ve listele."
+      prompt: "Bugün {gün}, {tarih}. {Günlük özeti|Kısa bir özet} hazırla."
+      retries: 2                   # Hata olursa 2 kez daha dene
+      retry_delay: 5               # Denemeler arası 5 dakika
     - id: "aksam-kontrol"
       cron: "0 18 * * *"           # Her gün 18:00
       enabled: true
       chat_id: "YOUR_CHAT_ID_HERE"
       prompt: "Yarım kalan görevleri gözden geçir ve tamamla."
   timezone: "Europe/Istanbul"
+  paused: false                    # true → tüm zamanlanmış çalışmalar durur
+
+history:
+  db_path: ./data/history.db       # Kalıcı çalışma geçmişi
 
 browser:
   headless: true                   # Arka planda gizli çalışması için true
@@ -128,6 +143,12 @@ browser:
     width: 1920
     height: 1080
 ```
+
+**Prompt değişkenleri** — her çalışmada doldurulur: `{tarih}` (30.10.2026), `{gün}` (Cuma), `{saat}`, `{ay}`, `{yıl}`, `{dün}`, `{yarın}`. `{seçenek 1|seçenek 2}` her seferinde seçeneklerden birini rastgele seçer; düz süslü parantez için `{{` ve `}}` yazın. Tanınmayan `{…}` ifadeleri olduğu gibi bırakılır.
+
+**Tekrar deneme** — yalnızca zamanlanmış, tekrar ve tek seferlik çalışmalarda uygulanır. Oturum hatalarında (giriş gerekli) tekrar denenmez, çünkü yeniden denemek sorunu çözmez.
+
+Dashboard'dan kaydettiğinizde dosyadaki yorumlar korunur ve dosya atomik yazılır (yarıda kesilen bir kayıt `config.yaml`'ı bozmaz).
 
 > **Önemli:** `config/config.yaml` kişisel sohbet ID'lerinizi içerdiği için `.gitignore` tarafından korunur ve Git reponuza yüklenmez.
 
@@ -176,9 +197,15 @@ python main.py
 Tarayıcınızdan **`http://localhost:8000`** adresine gidin.
 
 ### 2. Tek Seferlik Test Çalıştırması
-Scheduler beklemeden botun mesaj gönderimini test etmek için:
+Scheduler beklemeden botun mesaj gönderimini test etmek için (sonuç çalışma geçmişine de yazılır):
 ```bash
 python main.py --run-once
+```
+
+### 3. Testler
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
 ```
 
 ---
@@ -187,11 +214,17 @@ python main.py --run-once
 
 | Bölüm | Açıklama |
 |---|---|
-| **Genel Bakış** | Bot durumu (idle, running, success, error), toplam ve başarılı çalışma sayıları, sonraki çalışma zamanı |
-| **Hızlı Eylemler** | "Şimdi Çalıştır" butonu ile istediğiniz görevi anında tetikleme |
-| **Canlı Loglar** | SSE (Server-Sent Events) ile sayfayı yenilemeden gerçek zamanlı log akışı |
-| **Görsel Önizleme** | Son görev durumunun ve hataların ekran görüntüsü (screenshot) |
-| **Görev Yönetimi** | Web üzerinden yeni cron görevi ekleme, silme, prompt ve chat ID düzenleme |
+| **Genel Bakış** | Duruma göre renk değiştiren canlı durum göstergesi, sonraki çalışmaya geri sayım, önümüzdeki 24 saatin zaman çizelgesi (atlanan, tek seferlik ve tekrar çalışmaları dahil), tüm zamanların başarı oranı |
+| **Çalışma Takvimi** | Son 26 haftanın günlük ısı haritası ve kesintisiz başarı serisi |
+| **Oturum Sağlığı** | `sessionKey` çerezinin bitişine kalan gün; yenileme zamanı yaklaşınca uyarı ve kopyalanabilir komut |
+| **Son Çalışma** | Claude'un son yanıtı, ekran görüntüsü ve ayrıntılara geçiş |
+| **Hızlı Eylemler** | "Şimdi Çalıştır", görev başına ▶ ve ⋯ menüsü: *bir kez planla*, *sıradakini atla / geri al*, *geçmişini gör*; tüm zamanlamayı tek tıkla **duraklat / sürdür** |
+| **Geçmiş** | Kalıcı çalışma geçmişi; görev ve sonuca göre filtre. Her çalışmanın ayrıntısında Claude'un tam yanıtı (kopyalanabilir), gönderilen mesaj, hata, ekran görüntüsü ve o çalışmanın logları |
+| **Canlı Loglar** | SSE ile gerçek zamanlı akış; seviye filtresi, arama ve vurgulama, duraklatma, `.log` olarak indirme |
+| **Görevler** | Saat + gün seçici ile cron'suz zamanlama, prompt değişkenleri ve canlı önizleme, tekrar deneme ayarı, chat URL'si yapıştırınca ID'yi otomatik ayıklama, kaydedilmemiş değişiklik çubuğu (`⌘/Ctrl+S`) |
+| **Galeri** | Duruma göre filtrelenen, güne göre gruplanan ekran görüntüleri; klavyeyle gezilebilen tam ekran görüntüleyici |
+| **Komut Paleti** | `⌘K` / `Ctrl+K` ile her yere ve her eyleme erişim; `1`–`5` ile bölümler arası geçiş |
+| **Tema** | Açık, koyu ve sistem teması; mobilde alt sekme çubuğu |
 
 ---
 

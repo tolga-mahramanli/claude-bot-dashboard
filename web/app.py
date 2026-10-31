@@ -19,6 +19,7 @@ from web.routes.api import router as api_router
 logger = setup_logger("web")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -56,7 +57,9 @@ def create_app() -> FastAPI:
     # ── API rotaları ──────────────────────────────────────────
     app.include_router(api_router)
 
-    # ── Statik Dosyalar (Ekran Görüntüleri) ───────────────────
+    # ── Statik Dosyalar (Dashboard CSS/JS + Ekran Görüntüleri) ─
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
     screenshot_dir = Path("screenshots")
     screenshot_dir.mkdir(exist_ok=True)
     app.mount("/screenshots", StaticFiles(directory=str(screenshot_dir)), name="screenshots")

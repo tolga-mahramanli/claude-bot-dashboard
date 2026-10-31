@@ -37,6 +37,8 @@ class BotState:
     _log_buffer: deque = field(default_factory=lambda: deque(maxlen=300))
     # Toplam eklenen log sayısı (monoton artar; buffer dolsa da sıfırlanmaz)
     _log_seq: int = 0
+    # Aktif çalışmanın logları (geçmişe kaydedilmek üzere); None → yakalama kapalı
+    _run_capture: Optional[list] = None
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     # ── Durum güncelleme metodları ────────────────────────────
@@ -85,6 +87,17 @@ class BotState:
         with self._lock:
             self._log_buffer.append(line)
             self._log_seq += 1
+            if self._run_capture is not None and len(self._run_capture) < 2000:
+                self._run_capture.append(line)
+
+    def begin_run_capture(self) -> None:
+        with self._lock:
+            self._run_capture = []
+
+    def end_run_capture(self) -> str:
+        with self._lock:
+            lines, self._run_capture = self._run_capture or [], None
+        return "\n".join(lines)
 
     def get_logs(self, last_n: int = 100) -> list[str]:
         with self._lock:

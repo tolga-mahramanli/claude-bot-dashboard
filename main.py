@@ -141,13 +141,14 @@ def save_session_mode(config: dict) -> None:
             pass
 
 
-def run_once_mode(config: dict) -> None:
-    """Scheduler olmadan tek seferlik çalıştırma."""
-    from src.bot import ClaudeBot
+def run_once_mode(config: dict, config_path: str) -> None:
+    """Scheduler olmadan tek seferlik çalıştırma (sonuç geçmişe de yazılır)."""
+    from src.scheduler import init_history, run_bot_job
     logger.info("▶️  Tek seferlik çalıştırma modu")
-    bot = ClaudeBot(config)
-    success = bot.run_task()
-    sys.exit(0 if success else 1)
+    init_history(config)
+    # Global claude.chat_id / prompt kullanılır (config'de "cli" adlı görev yoksa)
+    status = run_bot_job(config_path=config_path, job_id="cli", trigger="cli")
+    sys.exit(0 if status == "success" else 1)
 
 
 def web_mode(host: str, port: int, reload: bool = False) -> None:
@@ -182,7 +183,7 @@ def main() -> None:
     if args.save_session:
         save_session_mode(config)
     elif args.run_once:
-        run_once_mode(config)
+        run_once_mode(config, args.config)
     else:
         web_mode(host=args.host, port=args.port, reload=args.reload)
 

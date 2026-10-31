@@ -10,13 +10,19 @@ scheduler:
     cron: 0 9 * * *          # dakika saat gün ay haftanın-günü
     enabled: true
     chat_id: YOUR_CHAT_ID_HERE   # claude.ai/chat/<ID>
-    prompt: Merhaba! Bu otomatik bir mesajdır.
+    # Değişkenler: {tarih} {gün} {saat} {ay} {yıl} {dün} {yarın}, rastgele seçim: {a|b|c}
+    prompt: Merhaba! Bugün {gün}, {tarih}. {Günün özeti|Kısa bir özet} verir misin?
+    retries: 2                 # hata olursa kaç kez tekrar denensin (0-5)
+    retry_delay: 5             # denemeler arası bekleme (dakika)
   - id: aksam
     cron: 0 18 * * *
     enabled: false
     chat_id: YOUR_CHAT_ID_HERE
     prompt: devam et
   timezone: Europe/Istanbul
+  paused: false              # true → tüm zamanlanmış çalışmalar duraklatılır
+history:
+  db_path: ./data/history.db # kalıcı çalışma geçmişi (SQLite)
 browser:
   user_data_dir: ./sessions/chrome_profile
   headless: true

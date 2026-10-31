@@ -110,6 +110,12 @@ class _ColoredFormatter(logging.Formatter):
     RESET = "\033[0m"
 
     def format(self, record: logging.LogRecord) -> str:
-        color = self.COLORS.get(record.levelname, self.RESET)
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        # Kayıt tüm handler'larca paylaşılır; renk kodu kalıcı yazılırsa
+        # sonraki handler'lar (Web UI tamponu) da ANSI kodlu seviye görür.
+        original = record.levelname
+        color = self.COLORS.get(original, self.RESET)
+        record.levelname = f"{color}{original}{self.RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = original

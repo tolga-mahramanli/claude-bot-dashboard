@@ -1,0 +1,3 @@
+# Geliştirme / test bağımlılıkları:  pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==8.3.3

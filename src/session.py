@@ -5,6 +5,7 @@ Claude.ai oturumunu disk üzerinde saklayıp yükler.
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -160,6 +161,26 @@ class SessionManager:
             return isinstance(data, list) and len(data) > 0
         except Exception:
             return False
+
+    def health(self) -> dict:
+        """
+        Dashboard için oturum özeti: dosya ne zaman kaydedildi ve
+        sessionKey çerezinin ne zaman sona ereceği. Çerez değerleri döndürülmez.
+        """
+        info = {"exists": self.session_exists(), "saved_at": None, "expires_at": None, "cookie_count": 0}
+        if not info["exists"]:
+            return info
+        try:
+            info["saved_at"] = datetime.fromtimestamp(self.cookie_file.stat().st_mtime).astimezone().isoformat()
+            with open(self.cookie_file, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+            info["cookie_count"] = len(cookies)
+            key = next((c for c in cookies if c.get("name") == "sessionKey"), None)
+            if key and key.get("expiry"):
+                info["expires_at"] = datetime.fromtimestamp(key["expiry"]).astimezone().isoformat()
+        except Exception as exc:
+            logger.debug(f"Oturum özeti okunamadı: {exc}")
+        return info
 
     def clear_session(self) -> None:
         """Kayıtlı session dosyalarını siler (çıkış yaptıktan sonra kullan)."""

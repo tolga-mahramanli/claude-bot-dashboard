@@ -230,6 +230,13 @@ class Selectors:
         'button[aria-label="Durdur"], '
         'button[data-testid="stop-button"]'
     )
+    # Asistan mesajları — ilk eşleşen selektörün son öğesi okunur
+    RESPONSE_SELECTORS = [
+        'div.font-claude-response',
+        'div.font-claude-message',
+        '[data-testid="assistant-message"]',
+        'div[data-is-streaming="false"]',
+    ]
     PAGE_LOADED     = 'div[class*="conversation"], main'
     LOGIN_INDICATOR = 'button[data-testid="login-with-google"], a[href*="/login"], input[type="email"]'
 
@@ -263,6 +270,9 @@ class ClaudeBot:
             config.get("logging", {}).get("screenshot_dir", "./screenshots")
         )
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
+
+        # Son run_task() sonucunun ayrıntıları (geçmiş kaydı için)
+        self.result: dict = {}
 
     # ── Driver ────────────────────────────────────────────────
 
@@ -415,6 +425,7 @@ class ClaudeBot:
         logger.info(f"💬 Prompt     : {effective_prompt[:80]}{'...' if len(effective_prompt) > 80 else ''}")
 
         bot_state.set_running()
+        self.result = {"status": "error", "error": None, "screenshot": None, "response": None}
 
         try:
             self.driver = self._build_driver()
@@ -433,10 +444,12 @@ class ClaudeBot:
                 if not had_cookie_file:
                     logger.error("❌ Session dosyası bulunamadı ve Chrome profilinde açık oturum yok!")
                     bot_state.set_no_session()
+                    self.result.update(status="session", error="Kayıtlı oturum yok")
                     return False
                 logger.error("❌ Oturum açılmamış!")
                 ss = self._take_screenshot("login_required")
                 bot_state.set_error("Oturum geçersiz - yeniden login gerekiyor", ss)
+                self.result.update(status="session", error="Oturum geçersiz - yeniden login gerekiyor", screenshot=ss)
                 return False
 
             if not had_cookie_file:
@@ -448,20 +461,24 @@ class ClaudeBot:
 
             self._wait_for_page_load()
 
+            replies_before = self._count_responses()
             success = self._send_message(effective_prompt)
             if success:
                 self._wait_for_response()
+                self.result["response"] = self._extract_response(replies_before)
                 self.session_manager.save_session(self.driver)
-                
+
                 # Başarılı olduğunda da screenshot al
                 ss = self._take_screenshot("success")
                 bot_state.last_screenshot = ss  # State'e yaz ki dashboard görsün
                 bot_state.set_success()
-                
+                self.result.update(status="success", screenshot=ss)
+
                 logger.info("✅ Görev başarıyla tamamlandı!")
                 return True
             else:
                 bot_state.set_error("Mesaj gönderilemedi")
+                self.result.update(error="Mesaj gönderilemedi")
                 return False
 
         except Exception as exc:
@@ -470,6 +487,7 @@ class ClaudeBot:
             logger.error(traceback.format_exc())
             ss = self._take_screenshot("critical_error")
             bot_state.set_error(err_msg, ss)
+            self.result.update(status="error", error=err_msg, screenshot=ss)
             return False
 
         finally:
@@ -653,6 +671,52 @@ class ClaudeBot:
             # 10sn içinde Stop butonu hiç çıkmadıysa (ya hemen cevap bitti ya da buton selektörü değişti)
             logger.warning("⚠️  Stop butonu çıkmadı veya çok hızlı bitti. İşleme devam ediliyor...")
             self._human_delay(2, 4)
+
+    _RESPONSE_JS = """
+        for (const sel of arguments[0]) {
+            const els = document.querySelectorAll(sel);
+            if (els.length) return [els.length, els[els.length - 1].innerText];
+        }
+        return [0, null];
+    """
+
+    def _read_last_response(self):
+        try:
+            count, text = self.driver.execute_script(self._RESPONSE_JS, Selectors.RESPONSE_SELECTORS)
+            return int(count or 0), text
+        except Exception:
+            return 0, None
+
+    def _count_responses(self) -> int:
+        return self._read_last_response()[0]
+
+    def _extract_response(self, replies_before: int, max_wait: float = 15.0) -> Optional[str]:
+        """
+        Claude'un son yanıtının metnini okur. Gönderimden önceki yanıt sayısı
+        aşılana ve metin iki ölçüm boyunca değişmeyene kadar kısa süre bekler;
+        böylece önceki bir yanıt ya da yarım kalmış metin kaydedilmez.
+        """
+        deadline = time.time() + max_wait
+        last, stable = None, 0
+        while time.time() < deadline:
+            count, text = self._read_last_response()
+            if count > replies_before and text:
+                if text == last:
+                    stable += 1
+                    if stable >= 2:
+                        break
+                else:
+                    stable = 0
+                last = text
+            time.sleep(1.0)
+
+        if not last:
+            logger.warning("⚠️  Claude'un yanıtı okunamadı (selektörler eşleşmedi)")
+            return None
+        text = last.strip()
+        preview = " ".join(text.split())
+        logger.info(f"💬 Yanıt alındı ({len(text)} karakter): {preview[:80]}{'...' if len(preview) > 80 else ''}")
+        return text[:20000]
 
     # ── Yardımcılar ───────────────────────────────────────────
 
